@@ -1,0 +1,7 @@
+# ninja log v5
+0	2209	1733797544085482132	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/attention/attention_weight_computation_kernel.o	f4d2443a70194ad9
+0	2480	1733797544361483985	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/attention/attention_value_computation_kernel.o	621a869e46c29377
+0	28748	1733797570573659979	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/knn/knn_func.o	b35f6727068336da
+0	44657	1733797586509766978	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/knn/knn_kernel.o	778c4afa61ff8f81
+0	44982	1733797586773768750	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/attention/attention_func.o	fac928fac56d8a44
+0	50315	1733797592005803880	/home/danielsanchez/AWMLprediction/projects/MTR/build/temp.linux-x86_64-cpython-310/mtr/ops/csrc/custom_ops.o	4d0c0618733f8395
