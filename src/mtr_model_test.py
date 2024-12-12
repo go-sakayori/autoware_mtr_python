@@ -9,7 +9,7 @@ from awml_pred.common import Config, create_logger, get_num_devices, init_dist_p
 from awml_pred.datasets import build_dataloader
 from awml_pred.models import build_model
 from awml_pred.runner import TestRunner
-
+from awml_pred.deploy.apis.torch2onnx import _load_inputs
 
 def parse_args() -> argparse.Namespace:
     """Return parsed.
@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(description="Test model", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("config", type=str, help="specify the config for training")
+    parser.add_argument("deploy", type=str, help="deploy configuration file")
     parser.add_argument("checkpoint", type=str, help="checkpoint to start from")
     parser.add_argument("-w", "--work_dir", type=str, default=None, help="working directory path")
 
@@ -97,9 +98,16 @@ def main() -> None:
     # test_loader = build_dataloader(cfg.dataset, is_distributed=is_distributed, training=False, seed=args.seed)
 
     model = build_model(cfg.model)
+    model.eval()
     model.cuda()
     model, args.start_epoch = load_checkpoint(model, args.checkpoint, is_distributed=is_distributed)
     print(model.named_buffers)
+
+    deploy_cfg = Config.from_file(args.deploy)
+    dummy_input = _load_inputs(deploy_cfg.input_shapes)
+
+    print(model(**dummy_input))
+
     # runner = TestRunner(config=cfg, model=model, test_loader=test_loader, is_distributed=is_distributed, logger=logger)
     # with torch.no_grad():
     #     _ = runner.evaluate()

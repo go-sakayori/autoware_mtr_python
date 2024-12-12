@@ -96,22 +96,22 @@ def _load_inputs(input_shapes: DictConfig) -> tuple[Tensor]:
         else:
             raise ValueError(f"Unexpected dtype: {dtype}")
 
-    inputs: list[Tensor] = []
-    for _, items in input_shapes.items():
+    inputs: dict[str, Tensor] = {}
+    for key, items in input_shapes.items():
         shape: list[int] = list(items.shape)
         dtype = _to_dtype(items.dtype)
 
         value_type: str = items.value
         if value_type == "ones":
-            value = torch.ones(shape, dtype=dtype)
+            value = torch.ones(shape, dtype=dtype).cuda()
         elif value_type == "zeros":
-            value = torch.zeros(shape, dtype=dtype)
+            value = torch.zeros(shape, dtype=dtype).cuda()
         elif value_type == "arange":
             assert len(shape) == 1
-            value = torch.arange(0, shape[0], dtype=dtype)
+            value = torch.arange(0, shape[0], dtype=dtype).cuda()
         else:
             raise ValueError(f"Unexpected value type: {value_type}")
 
-        inputs.append(value)
+        inputs[key] = value
 
-    return tuple(inputs)
+    return inputs
