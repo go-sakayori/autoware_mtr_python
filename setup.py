@@ -15,6 +15,7 @@ setup(
         (osp.join("share", package_name, "config"), glob("config/*")),
         (osp.join("share", package_name, "launch"), glob("launch/*")),
         (osp.join("share", package_name, "data"), glob("data/*")),
+        (osp.join("share", package_name, "src"), glob("src/*")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

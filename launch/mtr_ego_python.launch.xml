@@ -9,7 +9,7 @@
   <arg name="lanelet_file" default="lanelet2_map.osm"/>
   <arg name="build_only" default="true"/>
 
-  <node pkg="autoware_mtr_python" exec="autoware_mtr_python_ego_node" name="mtr_python_ego_node" output="screen">
+  <node pkg="autoware_mtr_python" exec="autoware_mtr_python_node" name="mtr_python_ego_node" output="screen">
     <param from="$(var param_path)" allow_substs="true"/>
     <remap from="~/input/ego" to="$(var input/ego)"/>
     <remap from="~/output/objects" to="$(var output/objects)"/>
