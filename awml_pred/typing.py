@@ -8,7 +8,7 @@ import torch
 import torch.utils.data as torch_data
 from numpy.typing import ArrayLike as _ArrayLike
 from numpy.typing import NDArray
-from numpy.typing._shape import _Shape
+# from numpy.typing._shape import _Shape
 from torch import nn
 
 # === torch ===
@@ -43,7 +43,8 @@ ParameterList = nn.ParameterList
 ParameterDict = nn.ParameterDict
 
 Graph = torch.Graph
-GraphCtx: TypeAlias = torch.onnx._internal.jit_utils.GraphContext  # noqa: SLF001
+# GraphCtx: TypeAlias = torch.onnx._internal.jit_utils.GraphContext  # noqa: SLF001
+GraphCtx = "GraphCtx"
 JitValue = torch.Value
 
 # === numpy ===
@@ -57,7 +58,9 @@ NDArrayBool = NDArray[np.bool_]
 NDArrayStr = NDArray[np.str_]
 
 ArrayLike = _ArrayLike
-ArrayShape = _Shape
+# ArrayShape = _Shape
+ArrayShape = NDArray.shape
+
 
 # logging
 Logger = RootLogger

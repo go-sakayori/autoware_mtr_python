@@ -1,3 +1,6 @@
 data/*
 work_dir/*
 *.pyc
+build/*
+install/*
+log/*

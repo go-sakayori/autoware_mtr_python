@@ -44,7 +44,7 @@ import yaml
 
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
-
+from awml_pred.deploy.apis.torch2onnx import _load_inputs
 
 class MTRNode(Node):
     def __init__(self) -> None:
@@ -119,6 +119,11 @@ class MTRNode(Node):
             .string_value
         )
 
+        deploy_config_path = (
+            self.declare_parameter("deploy_config", descriptor=descriptor)
+            .get_parameter_value()
+            .string_value
+        )
 
         checkpoint_path = (
             self.declare_parameter("checkpoint_path", descriptor=descriptor)
@@ -129,13 +134,16 @@ class MTRNode(Node):
         is_distributed = True
 
         model = build_model(cfg.model)
+        model.eval()
         model.cuda()
         model, _ = load_checkpoint(model, checkpoint_path, is_distributed=is_distributed)
         print(model.named_buffers)
-        logger = create_logger(log_file, rank=cfg.local_rank)
+        deploy_cfg = Config.from_file(deploy_config_path)
+        dummy_input = _load_inputs(deploy_cfg.input_shapes)
+
+        print(model(**dummy_input))
 
         if build_only:
-            logger.info("Model has been built successfully and exit.")
             exit(0)
 
         # self._tf_buffer = Buffer()

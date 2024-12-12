@@ -1,6 +1,6 @@
 custom_imports: [projects.MTR.mtr]
 
-work_dir: ./work_dir/mtr
+work_dir: ./work_dir/mtr_waymo
 start_epoch: 0
 max_epoch: 30
 ckpt_save_interval: 5
