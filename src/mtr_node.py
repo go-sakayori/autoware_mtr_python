@@ -171,7 +171,7 @@ class MTRNode(Node):
         # predicted traj point info is X,Y,Xmean,Ymean,Variance,Vx,Vy
 
         num_agent, num_mode, num_future, num_feat = pred_trajs.shape
-        assert num_feat == 7, f"Expected predicted feature is (x, y, vx, vy), but got {num_feat}"
+        assert num_feat == 7, f"Expected predicted feature is ( X,Y,Xmean,Ymean,Variance,Vx,Vy), but got {num_feat}"
 
         # transform from agent centric coords to world coords
         current_agent, _ = self._history.as_trajectory(latest=True)
