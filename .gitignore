@@ -4,3 +4,4 @@ work_dir/*
 build/*
 install/*
 log/*
+*__pycache__
