@@ -1,29 +1,48 @@
 import os.path as osp
 import hashlib
+import yaml
+import torch
+import numpy as np
 
-from nav_msgs.msg import Odometry
-from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 import rclpy.duration
+import rclpy.parameter
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-import rclpy.parameter
 from rclpy.qos import QoSHistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
-import yaml
-import torch
+from nav_msgs.msg import Odometry
 
+from numpy.typing import NDArray
+from rcl_interfaces.msg import ParameterDescriptor
 
+from autoware_perception_msgs.msg import PredictedObjects
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import _load_inputs
+from awml_pred.deploy.apis.torch2onnx import _load_random_inputs, _load_inputs
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
 from autoware_mtr.datatype import AgentLabel
+from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
+from autoware_mtr.conversion.predicted_object import to_predicted_objects
+
+def softmax(x: NDArray, axis: int) -> NDArray:
+    """Apply softmax.
+
+    Args:
+        x (NDArray): Input array.
+        axis (int): Axis to apply softmax.
+
+    Returns:
+        NDArray: Softmax result.
+    """
+    x -= x.max(axis=axis, keepdims=True)
+    x_exp = np.exp(x)
+    return x_exp / x_exp.sum(axis=axis, keepdims=True)
 
 class MTRNode(Node):
     def __init__(self) -> None:
@@ -81,6 +100,12 @@ class MTRNode(Node):
             .double_value
         )
 
+        self._score_threshold = (
+            self.declare_parameter("score_threshold", descriptor=descriptor)
+            .get_parameter_value()
+            .double_value
+        )
+
         self._history = AgentHistory(max_length=num_timestamp)
 
 
@@ -103,6 +128,8 @@ class MTRNode(Node):
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
+        # publisher
+        self._publisher = self.create_publisher(PredictedObjects, "~/output/objects", qos_profile)
 
     def _callback(self, msg: Odometry) -> None:
         # remove invalid ancient agent history
@@ -119,7 +146,7 @@ class MTRNode(Node):
         # print("current_ego.xyz",current_ego.xyz)
         self._history.update_state(current_ego, info)
 
-        dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
+        dummy_input = _load_random_inputs(self.deploy_cfg.input_shapes)
         # print(self.model(**dummy_input))
 
 
@@ -135,19 +162,19 @@ class MTRNode(Node):
         print("pred_trajs.shape()", pred_trajs.shape)
 
         # # post-process
-        # pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
+        pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
 
         # # convert to ROS msg
-        # pred_objs = to_predicted_objects(
-        #     header=msg.header,
-        #     infos=[info],
-        #     pred_scores=pred_scores,
-        #     pred_trajs=pred_trajs,
-        #     score_threshold=self._score_threshold,
-        # )
-        # self._publisher.publish(pred_objs)
+        pred_objs = to_predicted_objects(
+            header=msg.header,
+            infos=[info],
+            pred_scores=pred_scores,
+            pred_trajs=pred_trajs,
+            score_threshold=self._score_threshold,
+        )
+        self._publisher.publish(pred_objs)
 
-   def _postprocess(
+    def _postprocess(
         self,
         pred_scores: NDArray | torch.Tensor,
         pred_trajs: NDArray | torch.Tensor,
@@ -171,7 +198,7 @@ class MTRNode(Node):
         # predicted traj point info is X,Y,Xmean,Ymean,Variance,Vx,Vy
 
         num_agent, num_mode, num_future, num_feat = pred_trajs.shape
-        assert num_feat == 7, f"Expected predicted feature is ( X,Y,Xmean,Ymean,Variance,Vx,Vy), but got {num_feat}"
+        assert num_feat == 7, f"Expected predicted feature is (X, Y, Xmean, Ymean, Variance, Vx, Vy), but got {num_feat}"
 
         # transform from agent centric coords to world coords
         current_agent, _ = self._history.as_trajectory(latest=True)
