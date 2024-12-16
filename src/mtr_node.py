@@ -25,10 +25,34 @@ from awml_pred.models import build_model
 from awml_pred.deploy.apis.torch2onnx import _load_random_inputs, _load_inputs
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
+from autoware_mtr.conversion.lanelet import convert_lanelet
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
+from autoware_mtr.dataclass.lane import LaneSegment
+from autoware_mtr.dataclass.agent import AgentState
+from autoware_mtr.preprocess import embed_agent , embed_polyline , relative_pose_encode
 from autoware_mtr.conversion.predicted_object import to_predicted_objects
+from typing_extensions import Self
+from dataclasses import dataclass
+
+@dataclass
+class ModelInput:
+    uuids: list[str]
+    actor: NDArray
+    lane: NDArray
+    rpe: NDArray
+    rpe_mask: NDArray | None = None
+
+    def cuda(self, device: int | torch.device | None = None) -> Self:
+        self.actor = torch.from_numpy(self.actor).cuda(device)
+        self.lane = torch.from_numpy(self.lane).cuda(device)
+        self.rpe = torch.from_numpy(self.rpe).cuda(device)
+        if self.rpe_mask is not None:
+            self.rpe_mask = torch.from_numpy(self.rpe_mask).cuda(device)
+
+        return self
+
 
 def softmax(x: NDArray, axis: int) -> NDArray:
     """Apply softmax.
@@ -106,8 +130,24 @@ class MTRNode(Node):
             .double_value
         )
 
-        self._history = AgentHistory(max_length=num_timestamp)
+        lanelet_file = (
+            self.declare_parameter("lanelet_file", descriptor=descriptor)
+            .get_parameter_value()
+            .string_value
+        )
 
+        labels = (
+            self.declare_parameter("labels", descriptor=descriptor)
+            .get_parameter_value()
+            .string_array_value
+        )
+
+        self._history = AgentHistory(max_length=num_timestamp)
+        print("filename: ", lanelet_file)
+
+        self._lane_segments: list[LaneSegment] = convert_lanelet(lanelet_file)
+
+        self._label_ids = [AgentLabel.from_str(label).value for label in labels]
 
         cfg = Config.from_file(model_config_path)
         is_distributed = True
@@ -151,15 +191,26 @@ class MTRNode(Node):
 
 
         # pre-process
-        # inputs = self._preprocess(self._history, current_ego, self._lane_segments)
+        inputs = self._preprocess(self._history, current_ego, self._lane_segments)
 
         # # inference
 
         with torch.no_grad():
             pred_scores, pred_trajs = self.model(**dummy_input)
 
-        print("pred_scores.shape() ",pred_scores.shape)
+        print("pred_scores.shape() ", pred_scores.shape)
         print("pred_trajs.shape()", pred_trajs.shape)
+
+        print("---------dummy----------")
+        for key, value in dummy_input.items():
+            print(key, value.shape)
+        print("----------dummy----------")
+
+        print("inputs.actor", inputs.actor.shape)
+        print("inputs.lane", inputs.lane.shape)
+        print("inputs.rpe", inputs.rpe.shape)
+        print("inputs.rpe_mask", inputs.rpe_mask.shape)
+
 
         # # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
@@ -194,7 +245,6 @@ class MTRNode(Node):
             pred_scores = pred_scores.cpu().detach().numpy()
         if isinstance(pred_trajs, torch.Tensor):
             pred_trajs = pred_trajs.cpu().detach().numpy()
-
         # predicted traj point info is X,Y,Xmean,Ymean,Variance,Vx,Vy
 
         num_agent, num_mode, num_future, num_feat = pred_trajs.shape
@@ -218,7 +268,29 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
+    def _preprocess(
+        self,
+        history: AgentHistory,
+        current_ego: AgentState,
+        lane_segments: list[LaneSegment],
+    ) -> ModelInput:
+        """Run preprocess.
 
+        Args:
+            history (AgentHistory): Ego history.
+            current_ego (AgentState): Current ego state.
+            lane_segments (list[LaneSegments]): Lane segments.
+
+        Returns:
+            ModelInput: Model inputs.
+        """
+        trajectory, uuids = history.as_trajectory()
+        agent, agent_ctr, agent_vec = embed_agent(trajectory, current_ego, self._label_ids)
+        lane, lane_ctr, lane_vec = embed_polyline(lane_segments, current_ego)
+
+        rpe, rpe_mask = relative_pose_encode(agent_ctr, agent_vec, lane_ctr, lane_vec,return_mask=True)
+
+        return ModelInput(uuids, agent, lane, rpe, rpe_mask)
 
 def main(args=None) -> None:
     rclpy.init(args=args)
