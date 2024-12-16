@@ -37,13 +37,35 @@ class AgentHistory:
         Args:
             state (AgentState): Agent state.
         """
+        print(f"State being added: {state.xyz}")
+
         uuid = state.uuid
+
+        # Check if this UUID exists in histories; if not, initialize with unique AgentState instances
         if uuid not in self.histories:
+            print(f"Initializing history for UUID: {uuid}")
             self.histories[uuid] = deque(
-                [AgentState(uuid)] * self.max_length,
+                [AgentState(uuid=uuid) for _ in range(self.max_length)],
                 maxlen=self.max_length,
             )
-        self.histories[uuid].append(state)
+
+        print(f"Memory addresses of initial states for UUID {uuid}:")
+        for state in self.histories[uuid]:
+            print(id(state))
+        # Debugging: Print the current history before updating
+        print(f"History before appending for UUID {uuid}:")
+        for i, s in enumerate(self.histories[uuid]):
+            print(f"  History[{i}]: {s.xyz}")
+
+        # Append the new state (this automatically pops the oldest if max length is reached)
+        self.histories[uuid].append(AgentState(state.uuid,state.timestamp,state.label_id,state.xyz,state.size,state.yaw,state.vxy,state.is_valid))
+
+        # Debugging: Print the updated history
+        print(f"History after appending for UUID {uuid}:")
+        for i, s in enumerate(self.histories[uuid]):
+            print(f"  History[{i}]: {s.xyz}")
+
+        # Store additional info if provided
         if info is not None:
             self.infos[uuid] = info
 
