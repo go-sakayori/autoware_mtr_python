@@ -49,21 +49,10 @@ class AgentHistory:
                 maxlen=self.max_length,
             )
 
-        print(f"Memory addresses of initial states for UUID {uuid}:")
-        for state in self.histories[uuid]:
-            print(id(state))
-        # Debugging: Print the current history before updating
-        print(f"History before appending for UUID {uuid}:")
-        for i, s in enumerate(self.histories[uuid]):
-            print(f"  History[{i}]: {s.xyz}")
 
         # Append the new state (this automatically pops the oldest if max length is reached)
         self.histories[uuid].append(AgentState(state.uuid,state.timestamp,state.label_id,state.xyz,state.size,state.yaw,state.vxy,state.is_valid))
 
-        # Debugging: Print the updated history
-        print(f"History after appending for UUID {uuid}:")
-        for i, s in enumerate(self.histories[uuid]):
-            print(f"  History[{i}]: {s.xyz}")
 
         # Store additional info if provided
         if info is not None:

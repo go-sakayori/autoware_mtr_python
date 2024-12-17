@@ -144,7 +144,6 @@ class MTRNode(Node):
         )
 
         self._history = AgentHistory(max_length=num_timestamp)
-        print("filename: ", lanelet_file)
 
         self._lane_segments: list[LaneSegment] = convert_lanelet(lanelet_file)
 
