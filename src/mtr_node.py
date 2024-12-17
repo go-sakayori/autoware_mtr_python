@@ -23,7 +23,7 @@ from autoware_perception_msgs.msg import PredictedObjects
 from awml_pred.dataclass import Trajectory
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import _load_random_inputs, _load_inputs
+from awml_pred.deploy.apis.torch2onnx import  _load_inputs
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
 from autoware_mtr.conversion.lanelet import convert_lanelet
@@ -187,7 +187,7 @@ class MTRNode(Node):
         # print("current_ego.xyz",current_ego.xyz)
         self._history.update_state(current_ego, info)
 
-        dummy_input = _load_random_inputs(self.deploy_cfg.input_shapes)
+        dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
         # print(self.model(**dummy_input))
 
 
