@@ -1,5 +1,10 @@
+# Include awml_pred and its subdirectories
+!awml_pred/
+!awml_pred/**
+!projects/
+!projects/**
+
 data/*
-work_dir/*
 *.pyc
 build/*
 install/*
