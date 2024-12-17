@@ -162,7 +162,7 @@ class MTRNode(Node):
         self.model.cuda()
         self.model, _ = load_checkpoint(self.model, checkpoint_path, is_distributed=is_distributed)
         self.deploy_cfg = Config.from_file(deploy_config_path)
-
+        self.count = 0
         if build_only:
             exit(0)
 
@@ -191,20 +191,24 @@ class MTRNode(Node):
 
 
         # pre-process
-        self._preprocess(self._history, current_ego, self._lane_segments)
-
+        past_embed = self._preprocess(self._history, current_ego, self._lane_segments)
+        if self.count > 11:
+            dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
+            print(" dummy_input[obj_trajs]",  dummy_input["obj_trajs"])
+        if self.count <= 11:
+            self.count = self.count + 1
         # # inference
 
         with torch.no_grad():
             pred_scores, pred_trajs = self.model(**dummy_input)
 
-        print("pred_scores.shape() ", pred_scores.shape)
-        print("pred_trajs.shape()", pred_trajs.shape)
+        # print("pred_scores.shape() ", pred_scores.shape)
+        # print("pred_trajs.shape()", pred_trajs.shape)
 
-        print("---------dummy----------")
-        for key, value in dummy_input.items():
-            print(key, value.shape)
-        print("----------dummy----------")
+        # print("---------dummy----------")
+        # for key, value in dummy_input.items():
+        #     print(key, value.shape)
+        # print("----------dummy----------")
 
         # print("inputs.actor", inputs.actor.shape)
         # print("inputs.lane", inputs.lane.shape)
@@ -285,12 +289,11 @@ class MTRNode(Node):
         num_type = 3
 
         ego_history = self._history.histories[self._ego_uuid]
-        ego_past_xyz = np.zeros((num_target, num_agent, num_time, 3), dtype=np.float32)
-        ego_past_Vxy = np.zeros((num_target, num_agent, num_time, 3), dtype=np.float32)
+        ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 1), dtype=np.int32)
-        print("ego_past_xyz.size", ego_past_xyz.size)
 
-        yaw_embed = np.zeros((num_target, num_agent, num_time, 2), dtype=np.float32)
+        yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
 
         # accel
         # TODO: use accurate timestamp diff
@@ -299,8 +302,7 @@ class MTRNode(Node):
         # accel[:, :, 0, :] = accel[:, :, 1, :]
         ego_timestamps = np.ones((num_time), dtype=np.float32)
         for i,ego_state in enumerate(ego_history):
-            print("Filling #",i , "ego_state.xyz[0]&[1] ", ego_state.xyz[0], ego_state.xyz[1])
-            ego_timestamps[i] = ego_state.timestamp
+            # ego_timestamps[i] = ego_state.timestamp
             ego_past_xyz[0,0,i,0] = ego_state.xyz[0]
             ego_past_xyz[0,0,i,1] = ego_state.xyz[1]
             ego_past_xyz[0,0,i,2] = ego_state.xyz[2]
@@ -311,20 +313,20 @@ class MTRNode(Node):
             ego_past_Vxy[0,0,i,0] = ego_state.vxy[0]
             ego_past_Vxy[0,0,i,1] = ego_state.vxy[1]
 
-        time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
+        time_embed = np.ones((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[0, 0, :num_time, -1] = ego_timestamps
 
         types = ["TYPE_VEHICLE", "TYPE_PEDESTRIAN", "TYPE_CYCLIST"]
-        type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
+        type_onehot = np.ones((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         for i, target_type in enumerate(types):
             type_onehot[:, "TYPE_VEHICLE" == target_type, :, i] = 1
         type_onehot[np.arange(num_target), 0, :, num_type] = 1 ## target indices replaced by 0
         type_onehot[:,0 , :, num_type + 1] = 1             # scenario.ego_index replaced by 0
-
-        vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
-        accel = vel_diff / 0.1
-        accel[:, :, 0, :] = accel[:, :, 1, :]
+        accel = ego_past_Vxy.copy()
+        # vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
+        # accel = vel_diff / 0.1
+        # accel[:, :, 0, :] = accel[:, :, 1, :]
 
         past_embed = np.concatenate(
             (
@@ -339,8 +341,6 @@ class MTRNode(Node):
             axis=-1,
             dtype=np.float32,
         )
-
-        print("ego_past_xyz info:", ego_past_xyz)
 
         return past_embed
 
@@ -371,16 +371,11 @@ class MTRNode(Node):
 
         ego_input = get_current_ego_input(current_ego)
         past_embed = self.get_ego_past()
-        print("past_embed", past_embed)
-        print("ego_input", ego_input)
-        print("past_embed shape", past_embed.shape)
-        print("ego_input shape ", ego_input.shape)
-        # trajectory, uuids = history.as_trajectory()
-        # agent, agent_ctr, agent_vec = embed_agent(trajectory, current_ego, self._label_ids)
-        # lane, lane_ctr, lane_vec = embed_polyline(lane_segments, current_ego)
-
-        # rpe, rpe_mask = relative_pose_encode(agent_ctr, agent_vec, lane_ctr, lane_vec,return_mask=True)
-
+        # print("past_embed", past_embed)
+        # print("ego_input", ego_input)
+        # print("past_embed shape", past_embed.shape)
+        # print("ego_input shape ", ego_input.shape)
+        return past_embed
 
 
 def main(args=None) -> None:
