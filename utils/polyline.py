@@ -98,6 +98,16 @@ class TargetCentricPolyline:
         polylines[~polylines_mask] = 0
         return polylines, polylines_mask
 
+    @staticmethod
+    def _load_polyline_center(polyline: NDArrayF32, polyline_mask: NDArrayBool) -> NDArrayF32:
+        tmp_sum = (polyline[..., :3] * polyline_mask[..., None]).sum(axis=-2, dtype=np.float32)
+        polyline_center: NDArrayF32 = tmp_sum / np.clip(
+            polyline_mask.sum(axis=-1, dtype=np.float32)[..., None],
+            a_min=1.0,
+            a_max=None,
+        )
+        return polyline_center.astype(np.float32)
+
     def _generate_batch(self, polylines: NDArrayF32) -> tuple[NDArrayF32, NDArrayBool]:
         """Generate batch polylines from points shape with (N, Dp) to (K, P, Dp).
 
@@ -194,5 +204,6 @@ class TargetCentricPolyline:
         info : dict = {}
         info["polylines"] = ret_polylines
         info["polylines_mask"] = ret_polylines_mask > 0
+        info["polyline_centers"] = self._load_polyline_center(ret_polylines,ret_polylines_mask)
 
         return info

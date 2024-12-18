@@ -203,7 +203,7 @@ class MTRNode(Node):
         dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
-        past_embed, polyline_info = self._preprocess(self._history, current_ego, self._awml_static_map)
+        past_embed, polyline_info, ego_last_xyz = self._preprocess(self._history, current_ego, self._awml_static_map)
 
         print("polyline info ", polyline_info["polylines"].shape)
         print("polyline mask info ", polyline_info["polylines_mask"].shape)
@@ -211,11 +211,12 @@ class MTRNode(Node):
         if self.count > 11:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
             print("Before dummy_input[obj_trajs_last_pos] ", dummy_input["obj_trajs_last_pos"].shape )
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(current_ego.xyz.reshape((1,1,3))).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1,1,3))).cuda()
             print(" dummy_input[obj_trajs_last_pos]",  dummy_input["obj_trajs_last_pos"].shape)
+            print("ego_last_xyz ", ego_last_xyz.reshape((1,1,3)))
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
-
+            dummy_input["map_polylines_center"] = torch.Tensor(polyline_info["polyline_centers"]).cuda()
         if self.count <= 11:
             self.count = self.count + 1
         # # inference
@@ -310,6 +311,7 @@ class MTRNode(Node):
         num_type = 3
 
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        ego_last_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 1), dtype=np.int32)
 
@@ -326,6 +328,7 @@ class MTRNode(Node):
             ego_past_xyz[0,0,i,0] = ego_state.xyz[0]
             ego_past_xyz[0,0,i,1] = ego_state.xyz[1]
             ego_past_xyz[0,0,i,2] = ego_state.xyz[2]
+            ego_last_xyz  = ego_state.xyz
 
             yaw_embed[0,0, i,0] = np.sin(ego_state.yaw)
             yaw_embed[0,0,i, 1] = np.cos(ego_state.yaw)
@@ -363,7 +366,7 @@ class MTRNode(Node):
             dtype=np.float32,
         )
         # print("past embed \n",past_embed)
-        return past_embed
+        return past_embed , ego_last_xyz
 
 
 
@@ -393,13 +396,13 @@ class MTRNode(Node):
         # ego_input = get_current_ego_input(current_ego)
         polyline_info = self._preprocess_polyline(static_map=self._awml_static_map,target_state=current_ego,num_target=1)
         relative_history = get_relative_history(current_ego,self._history.histories[self._ego_uuid])
-        past_embed = self.get_ego_past(relative_history)
+        past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
         # print("past_embed", past_embed)
         # print("ego_input", ego_input)
         # print("past_embed shape", past_embed.shape)
         # print("ego_input shape ", ego_input.shape)
-        return past_embed, polyline_info
+        return past_embed, polyline_info , ego_last_xyz
 
 
 def main(args=None) -> None:
