@@ -3,6 +3,7 @@ import hashlib
 import yaml
 import torch
 import numpy as np
+from collections import deque
 
 import rclpy
 import rclpy.duration
@@ -27,6 +28,7 @@ from awml_pred.deploy.apis.torch2onnx import  _load_inputs
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
 from autoware_mtr.conversion.lanelet import convert_lanelet
+from autoware_mtr.conversion.trajectory import get_relative_history
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
@@ -187,14 +189,13 @@ class MTRNode(Node):
         self._history.update_state(current_ego, info)
 
         dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
-        # print(self.model(**dummy_input))
-
 
         # pre-process
         past_embed = self._preprocess(self._history, current_ego, self._lane_segments)
         if self.count > 11:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            print(" dummy_input[obj_trajs]",  dummy_input["obj_trajs"])
+            print(" dummy_input[obj_trajs]",  dummy_input["obj_trajs"].shape)
+
         if self.count <= 11:
             self.count = self.count + 1
         # # inference
@@ -273,7 +274,7 @@ class MTRNode(Node):
         return pred_scores, pred_trajs
 
 
-    def get_ego_past(self):
+    def get_ego_past(self, ego_history :  deque[AgentState]):
         """
         each state contains
         uuid: str
@@ -288,7 +289,6 @@ class MTRNode(Node):
         num_target, num_agent, num_time = 1 , 1 , 11
         num_type = 3
 
-        ego_history = self._history.histories[self._ego_uuid]
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 1), dtype=np.int32)
@@ -312,18 +312,19 @@ class MTRNode(Node):
 
             ego_past_Vxy[0,0,i,0] = ego_state.vxy[0]
             ego_past_Vxy[0,0,i,1] = ego_state.vxy[1]
+            ego_timestamps[i] = ego_state.timestamp
 
-        time_embed = np.ones((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
+        time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[0, 0, :num_time, -1] = ego_timestamps
 
         types = ["TYPE_VEHICLE", "TYPE_PEDESTRIAN", "TYPE_CYCLIST"]
-        type_onehot = np.ones((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
+        type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         for i, target_type in enumerate(types):
             type_onehot[:, "TYPE_VEHICLE" == target_type, :, i] = 1
         type_onehot[np.arange(num_target), 0, :, num_type] = 1 ## target indices replaced by 0
         type_onehot[:,0 , :, num_type + 1] = 1             # scenario.ego_index replaced by 0
-        accel = ego_past_Vxy.copy()
+        accel = np.zeros((num_target, num_agent, num_time, 3), dtype=np.float32)
         # vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
         # accel = vel_diff / 0.1
         # accel[:, :, 0, :] = accel[:, :, 1, :]
@@ -341,7 +342,7 @@ class MTRNode(Node):
             axis=-1,
             dtype=np.float32,
         )
-
+        # print("past embed \n",past_embed)
         return past_embed
 
 
@@ -362,15 +363,17 @@ class MTRNode(Node):
         Returns:
             ModelInput: Model inputs.
         """
-        def get_current_ego_input(current_ego_state):
-            agent_current_xyz = np.zeros((1, 1, 3), dtype=np.float32)
-            agent_current_xyz[...,0] = current_ego_state.xy[0]
-            agent_current_xyz[...,1] = current_ego_state.xy[1]
-            agent_current_xyz[...,2] = 0.0
-            return agent_current_xyz
+        # def get_current_ego_input(current_ego_state):
+        #     agent_current_xyz = np.zeros((1, 1, 3), dtype=np.float32)
+        #     agent_current_xyz[...,0] = current_ego_state.xy[0]
+        #     agent_current_xyz[...,1] = current_ego_state.xy[1]
+        #     agent_current_xyz[...,2] = 0.0
+        #     return agent_current_xyz
 
-        ego_input = get_current_ego_input(current_ego)
-        past_embed = self.get_ego_past()
+        # ego_input = get_current_ego_input(current_ego)
+        relative_history = get_relative_history(current_ego,self._history.histories[self._ego_uuid])
+        past_embed = self.get_ego_past(relative_history)
+
         # print("past_embed", past_embed)
         # print("ego_input", ego_input)
         # print("past_embed shape", past_embed.shape)
