@@ -19,15 +19,17 @@ from nav_msgs.msg import Odometry
 
 from numpy.typing import NDArray
 from rcl_interfaces.msg import ParameterDescriptor
+from utils.polyline import TargetCentricPolyline
 
 from autoware_perception_msgs.msg import PredictedObjects
-from awml_pred.dataclass import Trajectory
+from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
 from awml_pred.deploy.apis.torch2onnx import  _load_inputs
+
+from utils.lanelet_converter import convert_lanelet
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
-from autoware_mtr.conversion.lanelet import convert_lanelet
 from autoware_mtr.conversion.trajectory import get_relative_history
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
@@ -146,8 +148,19 @@ class MTRNode(Node):
         )
 
         self._history = AgentHistory(max_length=num_timestamp)
+        self._awml_static_map: AWMLStaticMap = convert_lanelet(lanelet_file)
 
-        self._lane_segments: list[LaneSegment] = convert_lanelet(lanelet_file)
+        num_polylines: int = 768
+        num_points: int = 20
+        break_distance: float = 1.0
+        center_offset: tuple[float, float] = (0.0, 0.0)
+
+        self._preprocess_polyline = TargetCentricPolyline(
+            num_polylines=num_polylines,
+            num_points=num_points,
+            break_distance=break_distance,
+            center_offset=center_offset,
+        )
 
         self._label_ids = [AgentLabel.from_str(label).value for label in labels]
 
@@ -187,14 +200,21 @@ class MTRNode(Node):
         )
         # print("current_ego.xyz",current_ego.xyz)
         self._history.update_state(current_ego, info)
-
         dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
-        past_embed = self._preprocess(self._history, current_ego, self._lane_segments)
+        past_embed, polyline_info = self._preprocess(self._history, current_ego, self._awml_static_map)
+
+        print("polyline info ", polyline_info["polylines"].shape)
+        print("polyline mask info ", polyline_info["polylines_mask"].shape)
+
         if self.count > 11:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            print(" dummy_input[obj_trajs]",  dummy_input["obj_trajs"].shape)
+            print("Before dummy_input[obj_trajs_last_pos] ", dummy_input["obj_trajs_last_pos"].shape )
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(current_ego.xyz.reshape((1,1,3))).cuda()
+            print(" dummy_input[obj_trajs_last_pos]",  dummy_input["obj_trajs_last_pos"].shape)
+            dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
+            dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
 
         if self.count <= 11:
             self.count = self.count + 1
@@ -351,7 +371,7 @@ class MTRNode(Node):
         self,
         history: AgentHistory,
         current_ego: AgentState,
-        lane_segments: list[LaneSegment],
+        awml_static_map: AWMLStaticMap,
     ) -> ModelInput:
         """Run preprocess.
 
@@ -371,6 +391,7 @@ class MTRNode(Node):
         #     return agent_current_xyz
 
         # ego_input = get_current_ego_input(current_ego)
+        polyline_info = self._preprocess_polyline(static_map=self._awml_static_map,target_state=current_ego,num_target=1)
         relative_history = get_relative_history(current_ego,self._history.histories[self._ego_uuid])
         past_embed = self.get_ego_past(relative_history)
 
@@ -378,7 +399,7 @@ class MTRNode(Node):
         # print("ego_input", ego_input)
         # print("past_embed shape", past_embed.shape)
         # print("ego_input shape ", ego_input.shape)
-        return past_embed
+        return past_embed, polyline_info
 
 
 def main(args=None) -> None:

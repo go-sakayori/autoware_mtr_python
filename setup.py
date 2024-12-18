@@ -9,7 +9,7 @@ package_name = "autoware_mtr_python"
 setup(
     name=package_name,
     version="0.0.0",
-    packages=find_packages(include=["autoware_mtr*", "autoware_mtr_python*","awml_pred*","projects*"],exclude=["test"]),
+    packages=find_packages(include=["autoware_mtr*", "autoware_mtr_python*","awml_pred*","projects*","utils"],exclude=["test"]),
     data_files=[
         (osp.join("share", package_name), ["package.xml"]),
         (osp.join("share", package_name, "config"), glob("config/*")),

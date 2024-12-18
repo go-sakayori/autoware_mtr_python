@@ -37,7 +37,6 @@ class AgentHistory:
         Args:
             state (AgentState): Agent state.
         """
-        print(f"State being added: {state.xyz}")
 
         uuid = state.uuid
 
@@ -93,8 +92,6 @@ class AgentHistory:
                 which means ancient.
         """
         timestamp_diff = abs(current_timestamp - latest_timestamp)
-        print("timestamp_diff")
-        print("threshold ", threshold)
         return timestamp_diff > threshold
 
     def as_trajectory(self, *, latest: bool = False) -> tuple[AgentTrajectory, list[str]]:
