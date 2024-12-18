@@ -51,7 +51,7 @@ class AgentHistory:
 
 
         # Append the new state (this automatically pops the oldest if max length is reached)
-        self.histories[uuid].append(AgentState(state.uuid,state.timestamp,state.label_id,state.xyz,state.size,state.yaw,state.vxy,state.is_valid))
+        self.histories[uuid].append(state)
 
 
         # Store additional info if provided
