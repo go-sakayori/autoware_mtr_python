@@ -3,8 +3,9 @@
     num_timestamp: 11 # the number of past frames
     timestamp_threshold: 3000.0 # [ms]
     score_threshold: 0.0 # threshold of predicted score
-    # labels: ["TYPE_VEHICLE", "TYPE_PEDESTRIAN", "TYPE_CYCLIST"]
-    labels: ["TYPE_VEHICLE"]
+    # labels: ["VEHICLE", "PEDESTRIAN", "CYCLIST"]
+    labels: ["VEHICLE"]
+
     # labels: ["VEHICLE", "PEDESTRIAN", "MOTORCYCLIST", "CYCLIST", "BUS"]
     checkpoint_path: "$(var data_path)/mtr_best.pth"
     model_config: "$(find-pkg-share autoware_mtr_python)/config/mtr_waymo.yaml"

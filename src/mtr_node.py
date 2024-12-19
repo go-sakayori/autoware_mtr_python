@@ -211,6 +211,7 @@ class MTRNode(Node):
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
             dummy_input["map_polylines_center"] = torch.Tensor(polyline_info["polyline_centers"]).cuda()
             dummy_input["intention_points"] = torch.Tensor(self._intention_points["intention_points"]).cuda()
+            print("obj_trajs_mask ", dummy_input["obj_trajs_mask"])
 
         if self.count <= 11:
             self.count = self.count + 1
@@ -291,35 +292,19 @@ class MTRNode(Node):
 
 
     def get_ego_past(self, ego_history :  deque[AgentState]):
-        """
-        each state contains
-        uuid: str
-        timestamp: float = -np.inf
-        label_id: int = -1
-        xyz: NDArray = np.zeros(3)
-        size: NDArray = np.zeros(3)
-        yaw: float = 0.0
-        vxy: NDArray = np.zeros(2)
-        is_valid: bool = False"""
 
         num_target, num_agent, num_time = 1 , 1 , 11
-        num_type = 3
+        num_type = 1 ## IS this supposed to be 1 or 3 if 3, embed dimension will be (...,31) and not (...,29)
 
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
         ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
-        ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 1), dtype=np.int32)
+        ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
 
         yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
 
-        # accel
-        # TODO: use accurate timestamp diff
-        # vel_diff = np.diff(agent_past.vxy, axis=2, prepend=agent_past.vxy[..., 0, :][:, :, None, :])
-        # accel = vel_diff / 0.1
-        # accel[:, :, 0, :] = accel[:, :, 1, :]
         ego_timestamps = np.ones((num_time), dtype=np.float32)
         for i,ego_state in enumerate(ego_history):
-            # ego_timestamps[i] = ego_state.timestamp
             ego_past_xyz[0,0,i,0] = ego_state.xyz[0]
             ego_past_xyz[0,0,i,1] = ego_state.xyz[1]
             ego_past_xyz[0,0,i,2] = ego_state.xyz[2]
@@ -330,21 +315,27 @@ class MTRNode(Node):
 
             ego_past_Vxy[0,0,i,0] = ego_state.vxy[0]
             ego_past_Vxy[0,0,i,1] = ego_state.vxy[1]
+            ego_past_xyz_size[0,0,i,0] = 4.0
+            ego_past_xyz_size[0,0,i,1] =  2.0
+            ego_past_xyz_size[0,0,i,2] =  1.0
             ego_timestamps[i] = ego_state.timestamp
 
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[0, 0, :num_time, -1] = ego_timestamps
 
-        types = ["TYPE_VEHICLE", "TYPE_PEDESTRIAN", "TYPE_CYCLIST"]
+        types = ["VEHICLE", "PEDESTRIAN", "CYCLIST"]
         type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         for i, target_type in enumerate(types):
-            type_onehot[:, "TYPE_VEHICLE" == target_type, :, i] = 1
+            type_onehot[:, "VEHICLE" == target_type, :, i] = 1
         type_onehot[np.arange(num_target), 0, :, num_type] = 1 ## target indices replaced by 0
         type_onehot[:,0 , :, num_type + 1] = 1             # scenario.ego_index replaced by 0
-        accel = np.zeros((num_target, num_agent, num_time, 3), dtype=np.float32)
         vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
         time_passed =  ego_timestamps[-1] - ego_timestamps[0]
+        print("time passed",time_passed)
+
+        # accel
+        # TODO: use accurate timestamp diff
         avg_time = time_passed / ego_timestamps.size
         accel = vel_diff / avg_time
         accel[:, :, 0, :] = accel[:, :, 1, :]
