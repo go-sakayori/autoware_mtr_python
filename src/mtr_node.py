@@ -218,30 +218,13 @@ class MTRNode(Node):
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(self._history, current_ego, self._awml_static_map)
 
-        print("polyline info ", polyline_info["polylines"].shape)
-        print("polyline mask info ", polyline_info["polylines_mask"].shape)
-
         if self.count > 11:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            print("Before dummy_input[obj_trajs_last_pos] ", dummy_input["obj_trajs_last_pos"].shape )
             dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1,1,3))).cuda()
-            print(" dummy_input[obj_trajs_last_pos]",  dummy_input["obj_trajs_last_pos"].shape)
-            print("ego_last_xyz ", ego_last_xyz.reshape((1,1,3)))
-
-            print("before  dummy_input[map_polylines]",  dummy_input["map_polylines"].shape)
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
-            print("After  dummy_input[map_polylines]",  dummy_input["map_polylines"].shape)
-
-            print("Before: ",  dummy_input["map_polylines_mask"].shape)
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
-            print("After: ",  dummy_input["map_polylines_mask"].shape)
-
-            print("Before: ",  dummy_input["map_polylines_center"].shape)
             dummy_input["map_polylines_center"] = torch.Tensor(polyline_info["polyline_centers"]).cuda()
-            print("After: ",  dummy_input["map_polylines_center"].shape)
-            print("Before: ",   dummy_input["intention_points"].shape)
             dummy_input["intention_points"] = torch.Tensor(self._intention_points["intention_points"]).cuda()
-            print("After: ",   dummy_input["intention_points"].shape)
 
         if self.count <= 11:
             self.count = self.count + 1
@@ -337,7 +320,7 @@ class MTRNode(Node):
         num_type = 3
 
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
-        ego_last_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        ego_last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
         ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 1), dtype=np.int32)
 
@@ -374,9 +357,11 @@ class MTRNode(Node):
         type_onehot[np.arange(num_target), 0, :, num_type] = 1 ## target indices replaced by 0
         type_onehot[:,0 , :, num_type + 1] = 1             # scenario.ego_index replaced by 0
         accel = np.zeros((num_target, num_agent, num_time, 3), dtype=np.float32)
-        # vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
-        # accel = vel_diff / 0.1
-        # accel[:, :, 0, :] = accel[:, :, 1, :]
+        vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
+        time_passed =  ego_timestamps[-1] - ego_timestamps[0]
+        avg_time = time_passed / ego_timestamps.size
+        accel = vel_diff / avg_time
+        accel[:, :, 0, :] = accel[:, :, 1, :]
 
         past_embed = np.concatenate(
             (
