@@ -3,8 +3,8 @@
 !awml_pred/**
 !projects/
 !projects/**
-
-data/*
+data/lanelet2_map.osm*
+data/mtr_best*
 *.pyc
 build/*
 install/*

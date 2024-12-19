@@ -42,23 +42,6 @@ from autoware_mtr.conversion.predicted_object import to_predicted_objects
 from typing_extensions import Self
 from dataclasses import dataclass
 
-@dataclass
-class ModelInput:
-    uuids: list[str]
-    actor: NDArray
-    lane: NDArray
-    rpe: NDArray
-    rpe_mask: NDArray | None = None
-
-    def cuda(self, device: int | torch.device | None = None) -> Self:
-        self.actor = torch.from_numpy(self.actor).cuda(device)
-        self.lane = torch.from_numpy(self.lane).cuda(device)
-        self.rpe = torch.from_numpy(self.rpe).cuda(device)
-        if self.rpe_mask is not None:
-            self.rpe_mask = torch.from_numpy(self.rpe_mask).cuda(device)
-
-        return self
-
 
 def softmax(x: NDArray, axis: int) -> NDArray:
     """Apply softmax.
@@ -197,12 +180,15 @@ class MTRNode(Node):
         self._tf_listener = TransformListener(self._tf_buffer, self)
         # publisher
         self._publisher = self.create_publisher(PredictedObjects, "~/output/objects", qos_profile)
+        self._prev_time = None
 
     def _callback(self, msg: Odometry) -> None:
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
-
+        if( self._prev_time is not None):
+            print("Elapsed time: ", timestamp - self._prev_time)
+        self._prev_time = timestamp
         # update agent history
         current_ego, info = from_odometry(
             msg,
@@ -213,7 +199,7 @@ class MTRNode(Node):
         # print("current_ego.xyz",current_ego.xyz)
         self._history.update_state(current_ego, info)
         # dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
-        dummy_input = _load_random_inputs(self.deploy_cfg.input_shapes)
+        dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(self._history, current_ego, self._awml_static_map)
@@ -386,7 +372,7 @@ class MTRNode(Node):
         history: AgentHistory,
         current_ego: AgentState,
         awml_static_map: AWMLStaticMap,
-    ) -> ModelInput:
+    ):
         """Run preprocess.
 
         Args:
@@ -395,24 +381,12 @@ class MTRNode(Node):
             lane_segments (list[LaneSegments]): Lane segments.
 
         Returns:
-            ModelInput: Model inputs.
-        """
-        # def get_current_ego_input(current_ego_state):
-        #     agent_current_xyz = np.zeros((1, 1, 3), dtype=np.float32)
-        #     agent_current_xyz[...,0] = current_ego_state.xy[0]
-        #     agent_current_xyz[...,1] = current_ego_state.xy[1]
-        #     agent_current_xyz[...,2] = 0.0
-        #     return agent_current_xyz
 
-        # ego_input = get_current_ego_input(current_ego)
+        """
         polyline_info = self._preprocess_polyline(static_map=self._awml_static_map,target_state=current_ego,num_target=1)
         relative_history = get_relative_history(current_ego,self._history.histories[self._ego_uuid])
         past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
-        # print("past_embed", past_embed)
-        # print("ego_input", ego_input)
-        # print("past_embed shape", past_embed.shape)
-        # print("ego_input shape ", ego_input.shape)
         return past_embed, polyline_info , ego_last_xyz
 
 
