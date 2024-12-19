@@ -115,3 +115,39 @@ def _load_inputs(input_shapes: DictConfig) -> tuple[Tensor]:
         inputs[key] = value
 
     return inputs
+
+def _load_random_inputs(input_shapes: DictConfig) -> tuple[Tensor]:
+    def _to_dtype(dtype: str) -> torch.dtype:
+        if dtype == "float":
+            return torch.float32
+        elif dtype == "int":
+            return torch.int32
+        elif dtype == "bool":
+            return torch.bool
+        else:
+            raise ValueError(f"Unexpected dtype: {dtype}")
+
+    inputs: dict[str, Tensor] = {}
+    for key, items in input_shapes.items():
+        shape: list[int] = list(items.shape)
+        dtype = _to_dtype(items.dtype)
+
+        value_type: str = items.value
+        if value_type == "ones":
+            if(dtype != torch.bool):
+                value = torch.randn(shape, dtype=dtype).cuda()  # Normally distributed random values
+                value = (value - value.min()) / (value.max() - value.min())  # Normalize to range [0, 1]
+                value = (2 * value - 1).cuda()
+            else:
+                value = torch.ones(shape, dtype=dtype).cuda()
+        elif value_type == "zeros":
+            value = torch.zeros(shape, dtype=dtype).cuda()
+        elif value_type == "arange":
+            assert len(shape) == 1
+            value = torch.arange(0, shape[0], dtype=dtype).cuda()
+        else:
+            raise ValueError(f"Unexpected value type: {value_type}")
+
+        inputs[key] = value
+
+    return inputs

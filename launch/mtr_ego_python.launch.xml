@@ -7,6 +7,7 @@
   <arg name="output/objects" default="mtr/objects"/>
 
   <arg name="lanelet_file" default="$(find-pkg-share autoware_mtr_python)/data/lanelet2_map.osm"/>
+  <arg name="intention_point_file" default="$(find-pkg-share autoware_mtr_python)/data/cluster64_dict.pkl"/>
   <arg name="build_only" default="false"/>
 
   <node pkg="autoware_mtr_python" exec="autoware_mtr_python_node" name="mtr_python_ego_node" output="screen">
@@ -14,6 +15,7 @@
     <remap from="~/input/ego" to="$(var input/ego)"/>
     <remap from="~/output/objects" to="$(var output/objects)"/>
     <param name="lanelet_file" value="$(var lanelet_file)"/>
+    <param name="intention_point_file" value="$(var intention_point_file)"/>
     <param name="build_only" value="$(var build_only)"/>
   </node>
 </launch>

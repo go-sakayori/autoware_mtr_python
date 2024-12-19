@@ -25,9 +25,10 @@ from autoware_perception_msgs.msg import PredictedObjects
 from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import  _load_inputs
+from awml_pred.deploy.apis.torch2onnx import  _load_inputs,  _load_random_inputs
 
 from utils.lanelet_converter import convert_lanelet
+from utils.load import LoadIntentionPoint
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
 from autoware_mtr.conversion.trajectory import get_relative_history
@@ -147,8 +148,19 @@ class MTRNode(Node):
             .string_array_value
         )
 
+
+        intention_point_file = (
+            self.declare_parameter("intention_point_file", descriptor=descriptor)
+            .get_parameter_value()
+            .string_value
+        )
+
         self._history = AgentHistory(max_length=num_timestamp)
         self._awml_static_map: AWMLStaticMap = convert_lanelet(lanelet_file)
+
+        intention_point_loader : LoadIntentionPoint = LoadIntentionPoint(intention_point_file,labels)
+        self._intention_points = intention_point_loader()
+        print("[intention_points]", self._intention_points["intention_points"].shape)
 
         num_polylines: int = 768
         num_points: int = 20
@@ -200,7 +212,8 @@ class MTRNode(Node):
         )
         # print("current_ego.xyz",current_ego.xyz)
         self._history.update_state(current_ego, info)
-        dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
+        # dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
+        dummy_input = _load_random_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(self._history, current_ego, self._awml_static_map)
@@ -214,9 +227,22 @@ class MTRNode(Node):
             dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1,1,3))).cuda()
             print(" dummy_input[obj_trajs_last_pos]",  dummy_input["obj_trajs_last_pos"].shape)
             print("ego_last_xyz ", ego_last_xyz.reshape((1,1,3)))
+
+            print("before  dummy_input[map_polylines]",  dummy_input["map_polylines"].shape)
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
+            print("After  dummy_input[map_polylines]",  dummy_input["map_polylines"].shape)
+
+            print("Before: ",  dummy_input["map_polylines_mask"].shape)
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
+            print("After: ",  dummy_input["map_polylines_mask"].shape)
+
+            print("Before: ",  dummy_input["map_polylines_center"].shape)
             dummy_input["map_polylines_center"] = torch.Tensor(polyline_info["polyline_centers"]).cuda()
+            print("After: ",  dummy_input["map_polylines_center"].shape)
+            print("Before: ",   dummy_input["intention_points"].shape)
+            dummy_input["intention_points"] = torch.Tensor(self._intention_points["intention_points"]).cuda()
+            print("After: ",   dummy_input["intention_points"].shape)
+
         if self.count <= 11:
             self.count = self.count + 1
         # # inference
