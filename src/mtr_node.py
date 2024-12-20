@@ -25,7 +25,7 @@ from autoware_perception_msgs.msg import PredictedObjects
 from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import  _load_inputs,  _load_random_inputs
+from awml_pred.deploy.apis.torch2onnx import _load_inputs,  _load_random_inputs
 
 from utils.lanelet_converter import convert_lanelet
 from utils.load import LoadIntentionPoint
@@ -37,7 +37,7 @@ from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
 from autoware_mtr.dataclass.lane import LaneSegment
 from autoware_mtr.dataclass.agent import AgentState
-from autoware_mtr.preprocess import embed_agent , embed_polyline , relative_pose_encode
+from autoware_mtr.preprocess import embed_agent, embed_polyline, relative_pose_encode
 from autoware_mtr.conversion.predicted_object import to_predicted_objects
 from typing_extensions import Self
 from dataclasses import dataclass
@@ -57,6 +57,7 @@ def softmax(x: NDArray, axis: int) -> NDArray:
     x_exp = np.exp(x)
     return x_exp / x_exp.sum(axis=axis, keepdims=True)
 
+
 class MTRNode(Node):
     def __init__(self) -> None:
         super().__init__("mtr_python_node")
@@ -66,7 +67,7 @@ class MTRNode(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10,
         )
-        #subscribers
+        # subscribers
         self._subscription = self.create_subscription(
             Odometry,
             "~/input/ego",
@@ -131,7 +132,6 @@ class MTRNode(Node):
             .string_array_value
         )
 
-
         intention_point_file = (
             self.declare_parameter("intention_point_file", descriptor=descriptor)
             .get_parameter_value()
@@ -141,7 +141,8 @@ class MTRNode(Node):
         self._history = AgentHistory(max_length=num_timestamp)
         self._awml_static_map: AWMLStaticMap = convert_lanelet(lanelet_file)
 
-        intention_point_loader : LoadIntentionPoint = LoadIntentionPoint(intention_point_file,labels)
+        intention_point_loader: LoadIntentionPoint = LoadIntentionPoint(
+            intention_point_file, labels)
         self._intention_points = intention_point_loader()
         print("[intention_points]", self._intention_points["intention_points"].shape)
 
@@ -162,9 +163,8 @@ class MTRNode(Node):
         cfg = Config.from_file(model_config_path)
         is_distributed = True
 
-        #Ego info
+        # Ego info
         self._ego_uuid = hashlib.shake_256("EGO".encode()).hexdigest(8)
-
 
         # Load Model
         self.model = build_model(cfg.model)
@@ -186,7 +186,7 @@ class MTRNode(Node):
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
-        if( self._prev_time is not None):
+        if (self._prev_time is not None):
             print("Elapsed time: ", timestamp - self._prev_time)
         self._prev_time = timestamp
         # update agent history
@@ -202,15 +202,17 @@ class MTRNode(Node):
         dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
-        past_embed, polyline_info, ego_last_xyz = self._preprocess(self._history, current_ego, self._awml_static_map)
+        past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
 
         if self.count > 11:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1,1,3))).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 1, 3))).cuda()
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
-            dummy_input["map_polylines_center"] = torch.Tensor(polyline_info["polyline_centers"]).cuda()
-            dummy_input["intention_points"] = torch.Tensor(self._intention_points["intention_points"]).cuda()
+            dummy_input["map_polylines_center"] = torch.Tensor(
+                polyline_info["polyline_centers"]).cuda()
+            dummy_input["intention_points"] = torch.Tensor(
+                self._intention_points["intention_points"]).cuda()
             print("obj_trajs_mask ", dummy_input["obj_trajs_mask"])
 
         if self.count <= 11:
@@ -232,7 +234,6 @@ class MTRNode(Node):
         # print("inputs.lane", inputs.lane.shape)
         # print("inputs.rpe", inputs.rpe.shape)
         # print("inputs.rpe_mask", inputs.rpe_mask.shape)
-
 
         # # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
@@ -275,7 +276,7 @@ class MTRNode(Node):
         # transform from agent centric coords to world coords
         current_agent, _ = self._history.as_trajectory(latest=True)
 
-        #first 2 elements are xy then we use the negative ego rotation. reshape, I dont know
+        # first 2 elements are xy then we use the negative ego rotation. reshape, I dont know
         # each trajectory is in  the ref frame of its own agent. For ego we might use TF ?
         pred_trajs[..., :2] = rotate_along_z(
             pred_trajs.reshape(num_agent, -1, num_feat)[..., :2], -current_agent.yaw
@@ -290,11 +291,11 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
+    def get_ego_past(self, ego_history:  deque[AgentState]):
 
-    def get_ego_past(self, ego_history :  deque[AgentState]):
-
-        num_target, num_agent, num_time = 1 , 1 , 11
-        num_type = 1 ## IS this supposed to be 1 or 3 if 3, embed dimension will be (...,31) and not (...,29)
+        num_target, num_agent, num_time = 1, 1, 11
+        # IS this supposed to be 1 or 3 if 3, embed dimension will be (...,31) and not (...,29)
+        num_type = 1
 
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
@@ -304,20 +305,20 @@ class MTRNode(Node):
         yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
 
         ego_timestamps = np.ones((num_time), dtype=np.float32)
-        for i,ego_state in enumerate(ego_history):
-            ego_past_xyz[0,0,i,0] = ego_state.xyz[0]
-            ego_past_xyz[0,0,i,1] = ego_state.xyz[1]
-            ego_past_xyz[0,0,i,2] = ego_state.xyz[2]
-            ego_last_xyz  = ego_state.xyz
+        for i, ego_state in enumerate(ego_history):
+            ego_past_xyz[0, 0, i, 0] = ego_state.xyz[0]
+            ego_past_xyz[0, 0, i, 1] = ego_state.xyz[1]
+            ego_past_xyz[0, 0, i, 2] = ego_state.xyz[2]
+            ego_last_xyz = ego_state.xyz
 
-            yaw_embed[0,0, i,0] = np.sin(ego_state.yaw)
-            yaw_embed[0,0,i, 1] = np.cos(ego_state.yaw)
+            yaw_embed[0, 0, i, 0] = np.sin(ego_state.yaw)
+            yaw_embed[0, 0, i, 1] = np.cos(ego_state.yaw)
 
-            ego_past_Vxy[0,0,i,0] = ego_state.vxy[0]
-            ego_past_Vxy[0,0,i,1] = ego_state.vxy[1]
-            ego_past_xyz_size[0,0,i,0] = 4.0
-            ego_past_xyz_size[0,0,i,1] =  2.0
-            ego_past_xyz_size[0,0,i,2] =  1.0
+            ego_past_Vxy[0, 0, i, 0] = ego_state.vxy[0]
+            ego_past_Vxy[0, 0, i, 1] = ego_state.vxy[1]
+            ego_past_xyz_size[0, 0, i, 0] = 4.0
+            ego_past_xyz_size[0, 0, i, 1] = 2.0
+            ego_past_xyz_size[0, 0, i, 2] = 1.0
             ego_timestamps[i] = ego_state.timestamp
 
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
@@ -328,11 +329,11 @@ class MTRNode(Node):
         type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         for i, target_type in enumerate(types):
             type_onehot[:, "VEHICLE" == target_type, :, i] = 1
-        type_onehot[np.arange(num_target), 0, :, num_type] = 1 ## target indices replaced by 0
-        type_onehot[:,0 , :, num_type + 1] = 1             # scenario.ego_index replaced by 0
+        type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
+        type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
         vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
-        time_passed =  ego_timestamps[-1] - ego_timestamps[0]
-        print("time passed",time_passed)
+        time_passed = ego_timestamps[-1] - ego_timestamps[0]
+        print("time passed", time_passed)
 
         # accel
         # TODO: use accurate timestamp diff
@@ -354,15 +355,11 @@ class MTRNode(Node):
             dtype=np.float32,
         )
         # print("past embed \n",past_embed)
-        return past_embed , ego_last_xyz
-
-
+        return past_embed, ego_last_xyz
 
     def _preprocess(
         self,
-        history: AgentHistory,
         current_ego: AgentState,
-        awml_static_map: AWMLStaticMap,
     ):
         """Run preprocess.
 
@@ -374,11 +371,13 @@ class MTRNode(Node):
         Returns:
 
         """
-        polyline_info = self._preprocess_polyline(static_map=self._awml_static_map,target_state=current_ego,num_target=1)
-        relative_history = get_relative_history(current_ego,self._history.histories[self._ego_uuid])
+        polyline_info = self._preprocess_polyline(
+            static_map=self._awml_static_map, target_state=current_ego, num_target=1)
+        relative_history = get_relative_history(
+            current_ego, self._history.histories[self._ego_uuid])
         past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
-        return past_embed, polyline_info , ego_last_xyz
+        return past_embed, polyline_info, ego_last_xyz
 
 
 def main(args=None) -> None:
