@@ -295,11 +295,11 @@ class MTRNode(Node):
 
         num_target, num_agent, num_time = 1, 1, 11
         # IS this supposed to be 1 or 3 if 3, embed dimension will be (...,31) and not (...,29)
-        num_type = 1
+        num_type = 3
 
         ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         ego_last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
-        ego_past_Vxy = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        ego_past_Vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
         ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
 
         yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
