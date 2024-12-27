@@ -22,6 +22,8 @@ from rcl_interfaces.msg import ParameterDescriptor
 from utils.polyline import TargetCentricPolyline
 
 from autoware_perception_msgs.msg import PredictedObjects
+from autoware_planning_msgs.msg import Trajectory, TrajectoryPoint
+
 from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
 from awml_pred.models import build_model
@@ -31,7 +33,7 @@ from utils.lanelet_converter import convert_lanelet
 from utils.load import LoadIntentionPoint
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.misc import timestamp2ms
-from autoware_mtr.conversion.trajectory import get_relative_history
+from autoware_mtr.conversion.trajectory import get_relative_history, to_trajectory
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
@@ -63,7 +65,7 @@ class MTRNode(Node):
         super().__init__("mtr_python_node")
 
         qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10,
         )
@@ -180,6 +182,9 @@ class MTRNode(Node):
         self._tf_listener = TransformListener(self._tf_buffer, self)
         # publisher
         self._publisher = self.create_publisher(PredictedObjects, "~/output/objects", qos_profile)
+        self._ego_traj_publisher = self.create_publisher(
+            Trajectory, "~/output/trajectory", qos_profile)
+
         self._prev_time = None
 
     def _callback(self, msg: Odometry) -> None:
@@ -222,22 +227,16 @@ class MTRNode(Node):
         with torch.no_grad():
             pred_scores, pred_trajs = self.model(**dummy_input)
 
-        # print("pred_scores.shape() ", pred_scores.shape)
-        # print("pred_trajs.shape()", pred_trajs.shape)
-
-        # print("---------dummy----------")
-        # for key, value in dummy_input.items():
-        #     print(key, value.shape)
-        # print("----------dummy----------")
-
-        # print("inputs.actor", inputs.actor.shape)
-        # print("inputs.lane", inputs.lane.shape)
-        # print("inputs.rpe", inputs.rpe.shape)
-        # print("inputs.rpe_mask", inputs.rpe_mask.shape)
-
         # # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
+        print(" 1st pred_trajs", pred_trajs.shape)
 
+        ego_traj = to_trajectory(header=msg.header,
+                                 infos=[info],
+                                 pred_scores=pred_scores,
+                                 pred_trajs=pred_trajs,
+                                 score_threshold=self._score_threshold,)[0]
+        self._ego_traj_publisher.publish(ego_traj)
         # # convert to ROS msg
         pred_objs = to_predicted_objects(
             header=msg.header,
