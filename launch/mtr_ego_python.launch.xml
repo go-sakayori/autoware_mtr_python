@@ -5,6 +5,8 @@
 
   <arg name="input/ego" default="/localization/kinematic_state"/>
   <arg name="output/objects" default="mtr/objects"/>
+  <arg name="output/trajectory" default="mtr/trajectory"/>
+
 
   <arg name="lanelet_file" default="$(find-pkg-share autoware_mtr_python)/data/lanelet2_map.osm"/>
   <arg name="intention_point_file" default="$(find-pkg-share autoware_mtr_python)/data/cluster64_dict.pkl"/>
@@ -14,6 +16,7 @@
     <param from="$(var param_path)" allow_substs="true"/>
     <remap from="~/input/ego" to="$(var input/ego)"/>
     <remap from="~/output/objects" to="$(var output/objects)"/>
+    <remap from="~/output/trajectory" to="$(var output/trajectory)"/>
     <param name="lanelet_file" value="$(var lanelet_file)"/>
     <param name="intention_point_file" value="$(var intention_point_file)"/>
     <param name="build_only" value="$(var build_only)"/>
