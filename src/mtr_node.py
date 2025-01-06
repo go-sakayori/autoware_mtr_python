@@ -151,7 +151,7 @@ class MTRNode(Node):
         num_polylines: int = 768
         num_points: int = 20
         break_distance: float = 1.0
-        center_offset: tuple[float, float] = (0.0, 0.0)
+        center_offset: tuple[float, float] = (30.0, 0.0)
 
         self._preprocess_polyline = TargetCentricPolyline(
             num_polylines=num_polylines,
