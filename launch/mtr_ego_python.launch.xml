@@ -4,6 +4,8 @@
   <arg name="data_path" default="$(find-pkg-share autoware_mtr_python)/data"/>
 
   <arg name="input/ego" default="/localization/kinematic_state"/>
+  <arg name="input/tracked_objects" default="/perception/object_recognition/tracking/objects"/>
+
   <arg name="output/objects" default="mtr/objects"/>
   <arg name="output/trajectory" default="mtr/trajectory"/>
 
@@ -15,6 +17,7 @@
   <node pkg="autoware_mtr_python" exec="autoware_mtr_python_node" name="mtr_python_ego_node" output="screen">
     <param from="$(var param_path)" allow_substs="true"/>
     <remap from="~/input/ego" to="$(var input/ego)"/>
+    <remap from="~/input/tracked_objects" to="$(var input/tracked_objects)"/>
     <remap from="~/output/objects" to="$(var output/objects)"/>
     <remap from="~/output/trajectory" to="$(var output/trajectory)"/>
     <param name="lanelet_file" value="$(var lanelet_file)"/>

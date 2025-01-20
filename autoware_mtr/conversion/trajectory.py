@@ -23,10 +23,25 @@ from awml_pred.ops import rotate_along_z
 from tf_transformations import quaternion_from_euler
 
 
+def get_relative_histories(reference_states: List[AgentState], histories: dict[str, AgentState]) -> List[deque[AgentState]]:
+    relative_histories = []
+    for reference_state in reference_states:
+        for i, history in enumerate(histories.values()):
+            print("-------history-------", history)
+            relative_history = get_relative_history(reference_state, history)
+            print("-------history-------", history)
+
+        relative_histories.append(relative_history)
+
+    return relative_histories
+
+
 def get_relative_history(reference_state: AgentState, history: deque[AgentState]) -> deque[AgentState]:
     relative_history = history.copy()
     print("-------relative history-------")
     for i, state in enumerate(history):
+        print(" id: ", state.uuid, " i: ", i)
+
         transformed_state_xyz = state.xyz - reference_state.xyz
         transformed_state_xyz[:2] = rotate_along_z(transformed_state_xyz[:2], -reference_state.yaw)
         transformed_state_yaw = state.yaw - reference_state.yaw
@@ -35,9 +50,8 @@ def get_relative_history(reference_state: AgentState, history: deque[AgentState]
         relative_timestamp = (state.timestamp - history[0].timestamp) / 1000.0
         relative_state = AgentState(uuid=state.uuid, timestamp=relative_timestamp, label_id=state.label_id, xyz=transformed_state_xyz,
                                     size=state.size, yaw=transformed_state_yaw, vxy=transformed_vxy.reshape((2,)), is_valid=state.is_valid)
+        print("relative state: ", relative_state)
         relative_history.append(relative_state)
-        print("#:", i, transformed_state_xyz, transformed_state_yaw,
-              transformed_vxy, relative_timestamp)
     print("-------relative history-------")
     return relative_history
 
