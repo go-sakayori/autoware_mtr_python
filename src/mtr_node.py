@@ -230,7 +230,7 @@ class MTRNode(Node):
         past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
         if self.count > self._num_timestamps:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 1, 3))).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 2, 3))).cuda()
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
             dummy_input["map_polylines_center"] = torch.Tensor(
@@ -306,7 +306,7 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
-    def get_embed_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
+    def get_embedded_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
 
         num_agent, num_target, num_time = int(len(agent_histories) / len(
             target_ids)), len(
@@ -360,6 +360,21 @@ class MTRNode(Node):
         vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
         accel = vel_diff / 0.1
         accel[:, :, 0, :] = accel[:, :, 1, :]
+
+        embedded_inputs = np.concatenate(
+            (
+                past_xyz,
+                past_xyz_size,
+                type_onehot,
+                time_embed,
+                yaw_embed,
+                past_Vxy,
+                accel,
+            ),
+            axis=-1,
+            dtype=np.float32,
+        )
+        return embedded_inputs, last_xyz
 
     def get_ego_past(self, ego_history:  deque[AgentState]):
 
@@ -446,10 +461,11 @@ class MTRNode(Node):
         relative_histories = get_relative_histories(
             [current_ego], sorted_histories)
         print("relative_histories", relative_histories)
-        self.get_embed_inputs(relative_histories, [0])
-        past_embed, ego_last_xyz = self.get_ego_past(relative_history)
+        embedded_inputs, last_xyz = self.get_embedded_inputs(relative_histories, [0])
+        # past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
-        return past_embed, polyline_info, ego_last_xyz
+        # return past_embed, polyline_info, ego_last_xyz
+        return embedded_inputs, polyline_info, last_xyz
 
 
 def main(args=None) -> None:
