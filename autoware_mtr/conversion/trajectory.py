@@ -33,7 +33,7 @@ def get_relative_histories(reference_states: List[AgentState], histories: dict[s
 
             # print("-------history-------", history)
 
-        relative_histories.append(relative_history)
+            relative_histories.append(relative_history)
 
     return relative_histories
 
