@@ -45,6 +45,7 @@ from autoware_mtr.dataclass.lane import LaneSegment
 from autoware_mtr.dataclass.agent import AgentState
 from autoware_mtr.preprocess import embed_agent, embed_polyline, relative_pose_encode
 from autoware_mtr.conversion.predicted_object import to_predicted_objects
+from typing import List
 from typing_extensions import Self
 from dataclasses import dataclass
 import random
@@ -305,6 +306,26 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
+    def get_embed_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
+        num_agent, num_target, num_time = len(agent_histories), len(
+            target_ids), len(agent_histories[0])
+        print("num_agent", num_agent)
+        print("num_target", num_target)
+        print("num_time", num_time)
+        num_type = 3
+
+        past_xyz = np.ones((num_agent, num_target, num_time, 3), dtype=np.float32)
+        last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
+        past_xyz_size = np.ones((num_agent, num_target, num_time, 3), dtype=np.int32)
+        past_Vxy = np.ones((num_agent, num_target, num_time, 2), dtype=np.float32)
+        yaw_embed = np.ones((num_agent, num_target, num_time, 2), dtype=np.float32)
+        timestamps = np.arange(0, num_time * 0.1, 0.1, dtype=np.float32)
+
+        time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
+        time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
+        time_embed[:, :, :num_time, -1] = timestamps
+        print("time_embed", time_embed)
+
     def get_ego_past(self, ego_history:  deque[AgentState]):
 
         num_target, num_agent, num_time = 1, 1, 11
@@ -388,6 +409,7 @@ class MTRNode(Node):
         relative_histories = get_relative_histories(
             [current_ego], self._history.histories)
         # print("relative_histories", relative_histories)
+        self.get_embed_inputs(relative_histories, [0])
         past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
         return past_embed, polyline_info, ego_last_xyz
