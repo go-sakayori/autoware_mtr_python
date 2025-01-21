@@ -229,8 +229,10 @@ class MTRNode(Node):
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
         if self.count > self._num_timestamps:
+            num_target, num_agent, num_time, num_feat = past_embed.shape
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 2, 3))).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(
+                ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
             dummy_input["map_polylines_center"] = torch.Tensor(
@@ -454,8 +456,6 @@ class MTRNode(Node):
 
         polyline_info = self._preprocess_polyline(
             static_map=self._awml_static_map, target_state=current_ego, num_target=1)
-        relative_history = get_relative_history(
-            current_ego, self._history.histories[self._ego_uuid])
         sorted_histories = order_from_closest_to_furthest(
             current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(
