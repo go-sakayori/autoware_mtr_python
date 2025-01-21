@@ -25,7 +25,6 @@ from tf_transformations import quaternion_from_euler
 
 def get_relative_history(reference_state: AgentState, history: deque[AgentState]) -> deque[AgentState]:
     relative_history = history.copy()
-    print("-------relative history-------")
     for i, state in enumerate(history):
         transformed_state_xyz = state.xyz - reference_state.xyz
         transformed_state_xyz[:2] = rotate_along_z(transformed_state_xyz[:2], -reference_state.yaw)
@@ -36,9 +35,6 @@ def get_relative_history(reference_state: AgentState, history: deque[AgentState]
         relative_state = AgentState(uuid=state.uuid, timestamp=relative_timestamp, label_id=state.label_id, xyz=transformed_state_xyz,
                                     size=state.size, yaw=transformed_state_yaw, vxy=transformed_vxy.reshape((2,)), is_valid=state.is_valid)
         relative_history.append(relative_state)
-        print("#:", i, transformed_state_xyz, transformed_state_yaw,
-              transformed_vxy, relative_timestamp)
-    print("-------relative history-------")
     return relative_history
 
 

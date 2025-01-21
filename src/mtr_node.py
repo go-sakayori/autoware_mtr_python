@@ -203,13 +203,7 @@ class MTRNode(Node):
 
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
-        print("current_ego", current_ego)
-        # print("past_embed shape\n", past_embed)
-        # print("polyline_info shape", polyline_info["polylines"].shape)
-        # print("polyline_info mask shape", polyline_info["polylines_mask"].shape)
-        # print("polyline_info center shape", polyline_info["polyline_centers"])
-        # print("track index", dummy_input["track_index_to_predict"].cpu())
-        # print("self._intention_points", self._intention_points["intention_points"])
+
         if self.count > self._num_timestamps:
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
             dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 1, 3))).cuda()
@@ -315,20 +309,16 @@ class MTRNode(Node):
             ego_past_xyz_size[0, 0, i, 1] = 2.0
             ego_past_xyz_size[0, 0, i, 2] = 1.0
             ego_timestamps[i] = i * 0.1
-            # ego_timestamps[i] = ego_state.timestamp
 
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[0, 0, :num_time, -1] = ego_timestamps
-
-        print("time_embed", time_embed)
 
         types = ["VEHICLE", "PEDESTRIAN", "CYCLIST"]
         type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
         type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
         type_onehot[:, 0, :, 0] = 1             # Set ego as a vehicle type
-        # print("type_onehot", type_onehot)
         vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
         time_passed = ego_timestamps[-1] - ego_timestamps[0]
 
@@ -337,10 +327,6 @@ class MTRNode(Node):
         avg_time = time_passed / ego_timestamps.size
         accel = vel_diff / avg_time
         accel[:, :, 0, :] = accel[:, :, 1, :]
-
-        # print("accel", accel)
-        # print("ego_past_Vxy", ego_past_Vxy)
-        # print("ego_past_xyz", ego_past_xyz)
 
         past_embed = np.concatenate(
             (
@@ -372,7 +358,6 @@ class MTRNode(Node):
 
         """
 
-        print("current_ego", current_ego)
         polyline_info = self._preprocess_polyline(
             static_map=self._awml_static_map, target_state=current_ego, num_target=1)
         relative_history = get_relative_history(
