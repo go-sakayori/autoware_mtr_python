@@ -37,7 +37,7 @@ from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.tracked_object import from_tracked_objects
 
 from autoware_mtr.conversion.misc import timestamp2ms
-from autoware_mtr.conversion.trajectory import get_relative_histories, get_relative_history, to_trajectory
+from autoware_mtr.conversion.trajectory import get_relative_histories, get_relative_history, order_from_closest_to_furthest, to_trajectory
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
@@ -306,6 +306,9 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
+    def extract_target_states(
+            self, target_uuids: List[str]) -> tuple[List[int], List[AgentState]]:
+
     def get_embed_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
 
         num_agent, num_target, num_time = int(len(agent_histories) / len(
@@ -432,8 +435,10 @@ class MTRNode(Node):
             static_map=self._awml_static_map, target_state=current_ego, num_target=1)
         relative_history = get_relative_history(
             current_ego, self._history.histories[self._ego_uuid])
+        sorted_histories = order_from_closest_to_furthest(
+            current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(
-            [current_ego], self._history.histories)
+            [current_ego], sorted_histories)
         print("relative_histories", relative_histories)
         self.get_embed_inputs(relative_histories, [0])
         past_embed, ego_last_xyz = self.get_ego_past(relative_history)

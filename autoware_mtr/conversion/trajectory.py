@@ -23,10 +23,15 @@ from awml_pred.ops import rotate_along_z
 from tf_transformations import quaternion_from_euler
 
 
-def get_relative_histories(reference_states: List[AgentState], histories: dict[str, AgentState]) -> List[deque[AgentState]]:
+def order_from_closest_to_furthest(reference_state: AgentState, histories: List[deque[AgentState]]) -> List[deque[AgentState]]:
+    # Sort histories by distance to reference state, making a copy of the list
+    return sorted(histories, key=lambda x: np.linalg.norm(x[-1].xyz - reference_state.xyz))
+
+
+def get_relative_histories(reference_states: List[AgentState], histories: List[deque[AgentState]]) -> List[deque[AgentState]]:
     relative_histories = []
 
-    for n, history in enumerate(histories.values()):
+    for n, history in enumerate(histories):
         for b, reference_state in enumerate(reference_states):
             # print("-------history-------", history)
             relative_history = get_relative_history(reference_state, history)
