@@ -231,12 +231,14 @@ class MTRNode(Node):
         if self.count > self._num_timestamps:
             num_target, num_agent, num_time, num_feat = past_embed.shape
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(
-                ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
+            dummy_input["obj_trajs_mask"] = torch.ones(
+                [num_target, num_agent, num_time], dtype=torch.bool).cuda()
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
             dummy_input["map_polylines_center"] = torch.Tensor(
                 polyline_info["polyline_centers"]).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(
+                ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
             dummy_input["intention_points"] = torch.Tensor(
                 self._intention_points["intention_points"]).cuda()
 
