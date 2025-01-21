@@ -25,10 +25,12 @@ from tf_transformations import quaternion_from_euler
 
 def get_relative_histories(reference_states: List[AgentState], histories: dict[str, AgentState]) -> List[deque[AgentState]]:
     relative_histories = []
-    for reference_state in reference_states:
-        for i, history in enumerate(histories.values()):
+
+    for n, history in enumerate(histories.values()):
+        for b, reference_state in enumerate(reference_states):
             # print("-------history-------", history)
             relative_history = get_relative_history(reference_state, history)
+
             # print("-------history-------", history)
 
         relative_histories.append(relative_history)
