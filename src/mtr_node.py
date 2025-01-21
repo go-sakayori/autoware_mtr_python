@@ -308,8 +308,8 @@ class MTRNode(Node):
 
     def get_embed_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
 
-        num_agent, num_target, num_time = len(agent_histories) / len(
-            target_ids), len(
+        num_agent, num_target, num_time = int(len(agent_histories) / len(
+            target_ids)), len(
             target_ids), len(agent_histories[0])
         print("num_agent", num_agent)
         print("num_target", num_target)
