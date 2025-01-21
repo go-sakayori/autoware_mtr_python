@@ -334,7 +334,7 @@ class MTRNode(Node):
                     past_xyz[n, b, t, 0] = state.xyz[0]
                     past_xyz[n, b, t, 1] = state.xyz[1]
                     past_xyz[n, b, t, 2] = state.xyz[2]
-                    last_xyz[n, b, 1, :] = state.xyz if t == T - 1 else last_xyz[n, b, 0, :]
+                    last_xyz[n, b, 0, :] = state.xyz if t == T - 1 else last_xyz[n, b, 0, :]
 
                     yaw_embed[n, b, t, 0] = np.sin(state.yaw)
                     yaw_embed[n, b, t, 1] = np.cos(state.yaw)
