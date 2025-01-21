@@ -83,7 +83,7 @@ class MTRNode(Node):
         print("tracked objects sub", self._tracked_objects_sub)
 
         qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
         )
@@ -205,11 +205,11 @@ class MTRNode(Node):
     def _tracked_objects_callback(self, msg: TrackedObjects) -> None:
         print("tracked objects callback")
         timestamp = timestamp2ms(msg.header)
-        print("timestamp", timestamp)
+        # print("timestamp", timestamp)
         # self._history.remove_invalid(timestamp, self._timestamp_threshold)
         states, infos = from_tracked_objects(msg)
         self._history.update(states, infos)
-        print("states", states)
+        # print("states", states)
 
     def _callback(self, msg: Odometry) -> None:
         # remove invalid ancient agent history
@@ -408,7 +408,7 @@ class MTRNode(Node):
             current_ego, self._history.histories[self._ego_uuid])
         relative_histories = get_relative_histories(
             [current_ego], self._history.histories)
-        # print("relative_histories", relative_histories)
+        print("relative_histories", relative_histories)
         self.get_embed_inputs(relative_histories, [0])
         past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
