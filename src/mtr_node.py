@@ -306,9 +306,6 @@ class MTRNode(Node):
 
         return pred_scores, pred_trajs
 
-    def extract_target_states(
-            self, target_uuids: List[str]) -> tuple[List[int], List[AgentState]]:
-
     def get_embed_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
 
         num_agent, num_target, num_time = int(len(agent_histories) / len(
