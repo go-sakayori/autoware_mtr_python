@@ -80,7 +80,6 @@ class MTRNode(Node):
 
         self._tracked_objects_sub = self.create_subscription(
             TrackedObjects, "~/input/tracked_objects", self._tracked_objects_callback, qos_profile_2)
-        print("tracked objects sub", self._tracked_objects_sub)
 
         qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
@@ -203,13 +202,9 @@ class MTRNode(Node):
             Trajectory, "~/output/trajectory", qos_profile)
 
     def _tracked_objects_callback(self, msg: TrackedObjects) -> None:
-        print("tracked objects callback")
         timestamp = timestamp2ms(msg.header)
-        # print("timestamp", timestamp)
-        # self._history.remove_invalid(timestamp, self._timestamp_threshold)
         states, infos = from_tracked_objects(msg)
         self._history.update(states, infos)
-        # print("states", states)
 
     def _callback(self, msg: Odometry) -> None:
         # remove invalid ancient agent history
@@ -349,18 +344,14 @@ class MTRNode(Node):
                     past_xyz_size[b, n, t, 1] = state.size[1]
                     past_xyz_size[b, n, t, 2] = state.size[2]
 
-        print("past_xyz", past_xyz)
-        print("last_xyz", last_xyz)
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[:, :, :num_time, -1] = timestamps
-        print("time_embed", time_embed)
 
         type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
         type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
         type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
         type_onehot[:, :, :, 0] = 1             # Set all agents as vehicle types
-        print("type_onehot", type_onehot)
         vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
         accel = vel_diff / 0.1
         accel[:, :, 0, :] = accel[:, :, 1, :]
@@ -462,7 +453,6 @@ class MTRNode(Node):
             current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(
             [current_ego], sorted_histories)
-        print("relative_histories", relative_histories)
         embedded_inputs, last_xyz = self.get_embedded_inputs(relative_histories, [0])
         # past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
