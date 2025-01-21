@@ -99,7 +99,7 @@ def _to_predicted_path(
     output = PredictedPath()
     output.time_step = Duration(seconds=0.1).to_msg()  # TODO(ktro2828): use specific value?
     output.confidence = float(pred_score)
-    for x, y, _, _,_,_,_ in pred_traj:  # (x, y, vx, vy)
+    for x, y, _, _, _, _, _ in pred_traj:  # (x, y, vx, vy)
         pose = Pose()
 
         pose.position.x = float(x)

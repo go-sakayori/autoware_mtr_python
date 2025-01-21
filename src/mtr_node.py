@@ -23,6 +23,8 @@ from utils.polyline import TargetCentricPolyline
 
 from autoware_perception_msgs.msg import PredictedObjects
 from autoware_planning_msgs.msg import Trajectory, TrajectoryPoint
+from autoware_perception_msgs.msg import TrackedObject
+from autoware_perception_msgs.msg import TrackedObjects
 
 from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
 from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
@@ -32,8 +34,10 @@ from awml_pred.deploy.apis.torch2onnx import _load_inputs,  _load_random_inputs
 from utils.lanelet_converter import convert_lanelet
 from utils.load import LoadIntentionPoint
 from autoware_mtr.conversion.ego import from_odometry
+from autoware_mtr.conversion.tracked_object import from_tracked_objects
+
 from autoware_mtr.conversion.misc import timestamp2ms
-from autoware_mtr.conversion.trajectory import get_relative_history, to_trajectory
+from autoware_mtr.conversion.trajectory import get_relative_histories, get_relative_history, order_from_closest_to_furthest, to_trajectory
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
@@ -41,6 +45,7 @@ from autoware_mtr.dataclass.lane import LaneSegment
 from autoware_mtr.dataclass.agent import AgentState
 from autoware_mtr.preprocess import embed_agent, embed_polyline, relative_pose_encode
 from autoware_mtr.conversion.predicted_object import to_predicted_objects
+from typing import List
 from typing_extensions import Self
 from dataclasses import dataclass
 import random
@@ -65,12 +70,22 @@ class MTRNode(Node):
     def __init__(self) -> None:
         super().__init__("mtr_python_node")
 
+        # subscribers
+
+        qos_profile_2 = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+
+        self._tracked_objects_sub = self.create_subscription(
+            TrackedObjects, "~/input/tracked_objects", self._tracked_objects_callback, qos_profile_2)
+
         qos_profile = QoSProfile(
             reliability=QoSReliabilityPolicy.RELIABLE,
             history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10,
+            depth=1,
         )
-        # subscribers
         self._subscription = self.create_subscription(
             Odometry,
             "~/input/ego",
@@ -186,6 +201,11 @@ class MTRNode(Node):
         self._ego_traj_publisher = self.create_publisher(
             Trajectory, "~/output/trajectory", qos_profile)
 
+    def _tracked_objects_callback(self, msg: TrackedObjects) -> None:
+        timestamp = timestamp2ms(msg.header)
+        states, infos = from_tracked_objects(msg)
+        self._history.update(states, infos)
+
     def _callback(self, msg: Odometry) -> None:
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
@@ -203,14 +223,17 @@ class MTRNode(Node):
 
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
-
         if self.count > self._num_timestamps:
+            num_target, num_agent, num_time, num_feat = past_embed.shape
             dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(ego_last_xyz.reshape((1, 1, 3))).cuda()
+            dummy_input["obj_trajs_mask"] = torch.ones(
+                [num_target, num_agent, num_time], dtype=torch.bool).cuda()
             dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
             dummy_input["map_polylines_center"] = torch.Tensor(
                 polyline_info["polyline_centers"]).cuda()
+            dummy_input["obj_trajs_last_pos"] = torch.Tensor(
+                ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
             dummy_input["intention_points"] = torch.Tensor(
                 self._intention_points["intention_points"]).cuda()
 
@@ -265,7 +288,7 @@ class MTRNode(Node):
         assert num_feat == 7, f"Expected predicted feature is (X, Y, Xmean, Ymean, Variance, Vx, Vy), but got {num_feat}"
 
         # transform from agent centric coords to world coords
-        current_agent, _ = self._history.as_trajectory(latest=True)
+        current_agent, _ = self._history.target_as_trajectory(self._ego_uuid, latest=True)
 
         # first 2 elements are xy then we use the negative ego rotation. reshape, I dont know
         # each trajectory is in  the ref frame of its own agent. For ego we might use TF ?
@@ -281,6 +304,72 @@ class MTRNode(Node):
         pred_trajs = np.take_along_axis(pred_trajs, sort_indices[..., None, None], axis=1)
 
         return pred_scores, pred_trajs
+
+    def get_embedded_inputs(self, agent_histories: List[deque[AgentState]], target_ids: List[int]):
+
+        num_agent, num_target, num_time = int(len(agent_histories) / len(
+            target_ids)), len(
+            target_ids), len(agent_histories[0])
+        print("num_agent", num_agent)
+        print("num_target", num_target)
+        print("num_time", num_time)
+        num_type = 3
+
+        B = num_target
+        N = num_agent
+        T = num_time
+
+        past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
+        past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
+        past_Vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
+        yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
+        timestamps = np.arange(0, num_time * 0.1, 0.1, dtype=np.float32)
+
+        for b in range(len(target_ids)):
+            for n in range(len(agent_histories)):
+                history = agent_histories[b * N + n]
+                for t, state in enumerate(history):
+                    past_xyz[b, n, t, 0] = state.xyz[0]
+                    past_xyz[b, n, t, 1] = state.xyz[1]
+                    past_xyz[b, n, t, 2] = state.xyz[2]
+                    last_xyz[b, n, 0, :] = state.xyz if t == T - 1 else last_xyz[b, n, 0, :]
+
+                    yaw_embed[b, n, t, 0] = np.sin(state.yaw)
+                    yaw_embed[b, n, t, 1] = np.cos(state.yaw)
+
+                    past_Vxy[b, n, t, 0] = state.vxy[0]
+                    past_Vxy[b, n, t, 1] = state.vxy[1]
+                    past_xyz_size[b, n, t, 0] = state.size[0]
+                    past_xyz_size[b, n, t, 1] = state.size[1]
+                    past_xyz_size[b, n, t, 2] = state.size[2]
+
+        time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
+        time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
+        time_embed[:, :, :num_time, -1] = timestamps
+
+        type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
+        type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
+        type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
+        type_onehot[:, :, :, 0] = 1             # Set all agents as vehicle types
+        vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
+        accel = vel_diff / 0.1
+        accel[:, :, 0, :] = accel[:, :, 1, :]
+
+        embedded_inputs = np.concatenate(
+            (
+                past_xyz,
+                past_xyz_size,
+                type_onehot,
+                time_embed,
+                yaw_embed,
+                past_Vxy,
+                accel,
+            ),
+            axis=-1,
+            dtype=np.float32,
+        )
+        return embedded_inputs, last_xyz
 
     def get_ego_past(self, ego_history:  deque[AgentState]):
 
@@ -360,11 +449,15 @@ class MTRNode(Node):
 
         polyline_info = self._preprocess_polyline(
             static_map=self._awml_static_map, target_state=current_ego, num_target=1)
-        relative_history = get_relative_history(
-            current_ego, self._history.histories[self._ego_uuid])
-        past_embed, ego_last_xyz = self.get_ego_past(relative_history)
+        sorted_histories = order_from_closest_to_furthest(
+            current_ego, self._history.histories.values())
+        relative_histories = get_relative_histories(
+            [current_ego], sorted_histories)
+        embedded_inputs, last_xyz = self.get_embedded_inputs(relative_histories, [0])
+        # past_embed, ego_last_xyz = self.get_ego_past(relative_history)
 
-        return past_embed, polyline_info, ego_last_xyz
+        # return past_embed, polyline_info, ego_last_xyz
+        return embedded_inputs, polyline_info, last_xyz
 
 
 def main(args=None) -> None:
