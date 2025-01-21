@@ -316,41 +316,50 @@ class MTRNode(Node):
         print("num_time", num_time)
         num_type = 3
 
-        N = num_agent
         B = num_target
+        N = num_agent
         T = num_time
 
-        past_xyz = np.ones((num_agent, num_target, num_time, 3), dtype=np.float32)
-        last_xyz = np.ones((num_agent, num_target, 1, 3), dtype=np.float32)
-        past_xyz_size = np.ones((num_agent, num_target, num_time, 3), dtype=np.int32)
-        past_Vxy = np.ones((num_agent, num_target, num_time, 2), dtype=np.float32)
-        yaw_embed = np.ones((num_agent, num_target, num_time, 2), dtype=np.float32)
+        past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
+        last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
+        past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
+        past_Vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
+        yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
         timestamps = np.arange(0, num_time * 0.1, 0.1, dtype=np.float32)
 
-        for n in range(len(agent_histories)):
-            for b in range(len(target_ids)):
-                history = agent_histories[n*B + b]
+        for b in range(len(target_ids)):
+            for n in range(len(agent_histories)):
+                history = agent_histories[b * N + n]
                 for t, state in enumerate(history):
-                    past_xyz[n, b, t, 0] = state.xyz[0]
-                    past_xyz[n, b, t, 1] = state.xyz[1]
-                    past_xyz[n, b, t, 2] = state.xyz[2]
-                    last_xyz[n, b, 0, :] = state.xyz if t == T - 1 else last_xyz[n, b, 0, :]
+                    past_xyz[b, n, t, 0] = state.xyz[0]
+                    past_xyz[b, n, t, 1] = state.xyz[1]
+                    past_xyz[b, n, t, 2] = state.xyz[2]
+                    last_xyz[b, n, 0, :] = state.xyz if t == T - 1 else last_xyz[b, n, 0, :]
 
-                    yaw_embed[n, b, t, 0] = np.sin(state.yaw)
-                    yaw_embed[n, b, t, 1] = np.cos(state.yaw)
+                    yaw_embed[b, n, t, 0] = np.sin(state.yaw)
+                    yaw_embed[b, n, t, 1] = np.cos(state.yaw)
 
-                    past_Vxy[n, b, t, 0] = state.vxy[0]
-                    past_Vxy[n, b, t, 1] = state.vxy[1]
-                    past_xyz_size[n, b, t, 0] = state.size[0]
-                    past_xyz_size[n, b, t, 1] = state.size[1]
-                    past_xyz_size[n, b, t, 2] = state.size[2]
+                    past_Vxy[b, n, t, 0] = state.vxy[0]
+                    past_Vxy[b, n, t, 1] = state.vxy[1]
+                    past_xyz_size[b, n, t, 0] = state.size[0]
+                    past_xyz_size[b, n, t, 1] = state.size[1]
+                    past_xyz_size[b, n, t, 2] = state.size[2]
 
         print("past_xyz", past_xyz)
         print("last_xyz", last_xyz)
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
         time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
         time_embed[:, :, :num_time, -1] = timestamps
-        # print("time_embed", time_embed)
+        print("time_embed", time_embed)
+
+        type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
+        type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
+        type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
+        type_onehot[:, :, :, 0] = 1             # Set all agents as vehicle types
+        print("type_onehot", type_onehot)
+        vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
+        accel = vel_diff / 0.1
+        accel[:, :, 0, :] = accel[:, :, 1, :]
 
     def get_ego_past(self, ego_history:  deque[AgentState]):
 
