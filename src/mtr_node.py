@@ -219,22 +219,23 @@ class MTRNode(Node):
             size=(4.0, 2.0, 1.0),
         )
         self._history.update_state(current_ego, info)
-        dummy_input = _load_inputs(self.deploy_cfg.input_shapes)
+        pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
         past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
         if self.count > self._num_timestamps:
             num_target, num_agent, num_time, num_feat = past_embed.shape
-            dummy_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            dummy_input["obj_trajs_mask"] = torch.ones(
+            pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
+            pre_processed_input["obj_trajs_mask"] = torch.ones(
                 [num_target, num_agent, num_time], dtype=torch.bool).cuda()
-            dummy_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
-            dummy_input["map_polylines_mask"] = torch.Tensor(polyline_info["polylines_mask"]).cuda()
-            dummy_input["map_polylines_center"] = torch.Tensor(
+            pre_processed_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
+            pre_processed_input["map_polylines_mask"] = torch.Tensor(
+                polyline_info["polylines_mask"]).cuda()
+            pre_processed_input["map_polylines_center"] = torch.Tensor(
                 polyline_info["polyline_centers"]).cuda()
-            dummy_input["obj_trajs_last_pos"] = torch.Tensor(
+            pre_processed_input["obj_trajs_last_pos"] = torch.Tensor(
                 ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
-            dummy_input["intention_points"] = torch.Tensor(
+            pre_processed_input["intention_points"] = torch.Tensor(
                 self._intention_points["intention_points"]).cuda()
 
         if self.count <= self._num_timestamps:
@@ -242,7 +243,7 @@ class MTRNode(Node):
         # # inference
 
         with torch.no_grad():
-            pred_scores, pred_trajs = self.model(**dummy_input)
+            pred_scores, pred_trajs = self.model(**pre_processed_input)
 
         # # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
@@ -310,9 +311,6 @@ class MTRNode(Node):
         num_agent, num_target, num_time = int(len(agent_histories) / len(
             target_ids)), len(
             target_ids), len(agent_histories[0])
-        print("num_agent", num_agent)
-        print("num_target", num_target)
-        print("num_time", num_time)
         num_type = 3
 
         B = num_target
@@ -343,7 +341,6 @@ class MTRNode(Node):
                     last_xyz[b, n, 0, :] = state.xyz if t == T - 1 else last_xyz[b, n, 0, :]
                     label_idx = state.label_id if state.label_id != AgentLabel.UNKNOWN.value or state.label_id != AgentLabel.STATIC.value else 0
                     type_onehot[b, n, t, label_idx] = 1
-                    print("label_idx", label_idx, "vehicle dims", state.size)
 
                     yaw_embed[b, n, t, 0] = np.sin(state.yaw)
                     yaw_embed[b, n, t, 1] = np.cos(state.yaw)
