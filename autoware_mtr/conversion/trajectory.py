@@ -80,11 +80,14 @@ def to_trajectory(
     # convert each object
     for info, cur_scores, cur_trajs in zip(infos, pred_scores, pred_trajs, strict=True):
         target_trajs = _to_trajectories(info, cur_scores, cur_trajs, score_threshold)
-        # get longest trajectory by measuring distance between waypoints
-        longest_traj = max(target_trajs, key=lambda x: sum(np.linalg.norm(
-            np.diff([[p.pose.position.x, p.pose.position.y] for p in x.points], axis=0), axis=1)))
-        longest_traj.header = header
-        output.append(longest_traj)
+
+        # longest_traj = max(target_trajs, key=lambda x: sum(np.linalg.norm(
+        #     np.diff([[p.pose.position.x, p.pose.position.y] for p in x.points], axis=0), axis=1)))
+        # longest_traj.header = header
+
+        best_traj = target_trajs[np.argmax(cur_scores)]
+        best_traj.header = header
+        output.append(best_traj)
     return output
 
 
