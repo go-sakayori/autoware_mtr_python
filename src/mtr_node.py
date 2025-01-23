@@ -222,12 +222,11 @@ class MTRNode(Node):
         pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
-        past_embed, polyline_info, ego_last_xyz = self._preprocess(current_ego)
+        past_embed, polyline_info, ego_last_xyz, trajectory_mask = self._preprocess(current_ego)
         if self.count > self._num_timestamps:
             num_target, num_agent, num_time, num_feat = past_embed.shape
             pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            pre_processed_input["obj_trajs_mask"] = torch.ones(
-                [num_target, num_agent, num_time], dtype=torch.bool).cuda()
+            pre_processed_input["obj_trajs_mask"] = trajectory_mask
             pre_processed_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
             pre_processed_input["map_polylines_mask"] = torch.Tensor(
                 polyline_info["polylines_mask"]).cuda()
@@ -331,6 +330,9 @@ class MTRNode(Node):
         type_onehot[np.arange(num_target), 0, :, num_type] = 1  # Only ego is target, so index is 0
         type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
 
+        trajectory_mask = torch.ones(
+            [num_target, num_agent, num_time], dtype=torch.bool).cuda()
+
         for b in range(len(target_ids)):
             for n in range(len(agent_histories)):
                 history = agent_histories[b * N + n]
@@ -350,6 +352,7 @@ class MTRNode(Node):
                     past_xyz_size[b, n, t, 0] = state.size[0]
                     past_xyz_size[b, n, t, 1] = state.size[1]
                     past_xyz_size[b, n, t, 2] = state.size[2]
+                    trajectory_mask[b, n, t] = state.is_valid
 
         vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
         accel = vel_diff / 0.1
@@ -368,7 +371,7 @@ class MTRNode(Node):
             axis=-1,
             dtype=np.float32,
         )
-        return embedded_inputs, last_xyz
+        return embedded_inputs, last_xyz, trajectory_mask
 
     def get_ego_past(self, ego_history:  deque[AgentState]):
 
@@ -452,11 +455,9 @@ class MTRNode(Node):
             current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(
             [current_ego], sorted_histories)
-        embedded_inputs, last_xyz = self.get_embedded_inputs(relative_histories, [0])
-        # past_embed, ego_last_xyz = self.get_ego_past(relative_history)
-
-        # return past_embed, polyline_info, ego_last_xyz
-        return embedded_inputs, polyline_info, last_xyz
+        embedded_inputs, last_xyz, trajectory_mask = self.get_embedded_inputs(relative_histories, [
+                                                                              0])
+        return embedded_inputs, polyline_info, last_xyz, trajectory_mask
 
 
 def main(args=None) -> None:
