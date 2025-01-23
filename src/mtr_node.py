@@ -50,6 +50,8 @@ from typing_extensions import Self
 from dataclasses import dataclass
 import random
 
+import onnxruntime as ort
+
 
 def softmax(x: NDArray, axis: int) -> NDArray:
     """Apply softmax.
@@ -154,6 +156,34 @@ class MTRNode(Node):
             self.declare_parameter("intention_point_file", descriptor=descriptor)
             .get_parameter_value()
             .string_value
+        )
+
+        onnx_file = (
+            self.declare_parameter("onnx_file", descriptor=descriptor)
+            .get_parameter_value()
+            .string_value
+        )
+
+        custom_ops = (
+            self.declare_parameter("custom_ops", descriptor=descriptor)
+            .get_parameter_value()
+            .string_array_value
+        )
+
+        session_options = ort.SessionOptions()
+
+        for custom_op in custom_ops:
+            print("Registering custom op", custom_op)
+            torch.ops.load_library(custom_op)
+            session_options.register_custom_ops_library(custom_op)
+            # print(torch.ops.awml_pred.knn_batch_mlogk)
+
+        # Create an ONNX Runtime inference session
+        print("Loading ONNX file", onnx_file)
+        self.session = ort.InferenceSession(onnx_file)
+        self.session = ort.InferenceSession(
+            onnx_file,
+            sess_options=session_options
         )
 
         self._num_timestamps = num_timestamp

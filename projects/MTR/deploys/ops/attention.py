@@ -6,6 +6,8 @@ from torch.onnx.symbolic_helper import parse_args
 
 from awml_pred.deploy.rewriters import FUNCTION_REWRITER
 from awml_pred.typing import GraphCtx, JitValue, Tensor
+from torch.onnx import register_custom_op_symbolic
+
 
 # References:
 #   https://github.com/open-mmlab/mmdeploy/blob/main/mmdeploy/mmcv/ops/nms.py
