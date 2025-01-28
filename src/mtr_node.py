@@ -174,13 +174,10 @@ class MTRNode(Node):
 
         for custom_op in custom_ops:
             print("Registering custom op", custom_op)
-            torch.ops.load_library(custom_op)
             session_options.register_custom_ops_library(custom_op)
-            # print(torch.ops.awml_pred.knn_batch_mlogk)
 
         # Create an ONNX Runtime inference session
         print("Loading ONNX file", onnx_file)
-        self.session = ort.InferenceSession(onnx_file)
         self.session = ort.InferenceSession(
             onnx_file,
             sess_options=session_options
