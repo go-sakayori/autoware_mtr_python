@@ -49,6 +49,7 @@ from typing import List
 from typing_extensions import Self
 from dataclasses import dataclass
 import random
+import time
 
 
 def softmax(x: NDArray, axis: int) -> NDArray:
@@ -208,6 +209,7 @@ class MTRNode(Node):
         self._history.update(states, infos)
 
     def _callback(self, msg: Odometry) -> None:
+        start = time.perf_counter()
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
@@ -262,6 +264,8 @@ class MTRNode(Node):
             score_threshold=self._score_threshold,
         )
         self._publisher.publish(pred_objs)
+        end = time.perf_counter()
+        print(f"Time taken: {end - start} seconds")
 
     def _postprocess(
         self,

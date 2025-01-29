@@ -170,17 +170,11 @@ class TargetCentricPolyline:
         """
 
         if batch_polylines is None or batch_polylines_mask is None:
-            start = time.perf_counter()
-
             all_polylines: NDArrayF32 = static_map.get_all_polyline(as_array=True, full=True)
-            print(f"generate all polylines: {time.perf_counter() - start}")
-
-            start = time.perf_counter()
             batch_polylines, batch_polylines_mask = self._generate_batch(all_polylines)
-            print(f"generate batch time: {time.perf_counter() - start}")
+
         ret_polylines: NDArrayF32
         ret_polylines_mask: NDArrayBool
-        start = time.perf_counter()
         if len(batch_polylines) > self.num_polylines:
             polyline_center: NDArrayF32 = batch_polylines[..., :2].sum(axis=1) / np.clip(
                 batch_polylines_mask.sum(axis=-1, dtype=np.float32)[:, None],
@@ -205,11 +199,8 @@ class TargetCentricPolyline:
         else:
             ret_polylines = batch_polylines[None, ...].repeat(num_target, axis=0)
             ret_polylines_mask = batch_polylines_mask[None, ...].repeat(num_target, axis=0)
-        print(f"select topk time: {time.perf_counter() - start}")
-        start = time.perf_counter()
         ret_polylines, ret_polylines_mask = self._do_transform(
             ret_polylines, ret_polylines_mask, target_state, num_target)
-        print(f"do transform time: {time.perf_counter() - start}")
         info: dict = {}
         info["polylines"] = ret_polylines
         info["polylines_mask"] = ret_polylines_mask > 0
