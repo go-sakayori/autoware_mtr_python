@@ -454,8 +454,12 @@ class MTRNode(Node):
 
         """
 
+        start = time.perf_counter()
         polyline_info = self._preprocess_polyline(
             static_map=self._awml_static_map, target_state=current_ego, num_target=1)
+        end = time.perf_counter()
+        print(f"Time taken for polyline creation: {end - start:.6f} seconds")
+
         sorted_histories = order_from_closest_to_furthest(
             current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(
