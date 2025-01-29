@@ -1,6 +1,4 @@
-import os.path as osp
 import hashlib
-import yaml
 import torch
 import numpy as np
 from collections import deque
@@ -22,34 +20,25 @@ from rcl_interfaces.msg import ParameterDescriptor
 from utils.polyline import TargetCentricPolyline
 
 from autoware_perception_msgs.msg import PredictedObjects
-from autoware_planning_msgs.msg import Trajectory, TrajectoryPoint
-from autoware_perception_msgs.msg import TrackedObject
+from autoware_planning_msgs.msg import Trajectory
 from autoware_perception_msgs.msg import TrackedObjects
 
-from awml_pred.dataclass import AWMLStaticMap, AWMLAgentScenario
-from awml_pred.common import Config, create_logger, get_num_devices, init_dist_pytorch, init_dist_slurm, load_checkpoint
+from awml_pred.dataclass import AWMLStaticMap
+from awml_pred.common import Config, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import _load_inputs,  _load_random_inputs
-
+from awml_pred.deploy.apis.torch2onnx import _load_inputs
 from utils.lanelet_converter import convert_lanelet
 from utils.load import LoadIntentionPoint
 from autoware_mtr.conversion.ego import from_odometry
 from autoware_mtr.conversion.tracked_object import from_tracked_objects
-
 from autoware_mtr.conversion.misc import timestamp2ms
-from autoware_mtr.conversion.trajectory import get_relative_histories, get_relative_history, order_from_closest_to_furthest, to_trajectory
+from autoware_mtr.conversion.trajectory import get_relative_histories, order_from_closest_to_furthest, to_trajectory
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
-from autoware_mtr.dataclass.lane import LaneSegment
 from autoware_mtr.dataclass.agent import AgentState
-from autoware_mtr.preprocess import embed_agent, embed_polyline, relative_pose_encode
 from autoware_mtr.conversion.predicted_object import to_predicted_objects
 from typing import List
-from typing_extensions import Self
-from dataclasses import dataclass
-import random
-import time
 
 
 def softmax(x: NDArray, axis: int) -> NDArray:

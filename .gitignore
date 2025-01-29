@@ -5,6 +5,7 @@
 !projects/**
 data/lanelet2_map.osm*
 data/mtr_best*
+data/*.onnx
 *.pyc
 build/*
 install/*
