@@ -49,6 +49,7 @@ from typing import List
 from typing_extensions import Self
 from dataclasses import dataclass
 import random
+import time
 
 
 def softmax(x: NDArray, axis: int) -> NDArray:
@@ -222,7 +223,10 @@ class MTRNode(Node):
         pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         # pre-process
+        start = time.perf_counter()
         past_embed, polyline_info, ego_last_xyz, trajectory_mask = self._preprocess(current_ego)
+        end = time.perf_counter()
+        print(f"Time taken for preprocess: {end - start:.6f} seconds")
         if self.count > self._num_timestamps:
             num_target, num_agent, num_time, num_feat = past_embed.shape
             pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
@@ -240,10 +244,11 @@ class MTRNode(Node):
         if self.count <= self._num_timestamps:
             self.count = self.count + 1
         # # inference
-
+        start = time.perf_counter()
         with torch.no_grad():
             pred_scores, pred_trajs = self.model(**pre_processed_input)
-
+        end = time.perf_counter()
+        print(f"Time taken for inference: {end - start:.6f} seconds")
         # # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
         ego_traj = to_trajectory(header=msg.header,
