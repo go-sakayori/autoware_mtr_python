@@ -49,6 +49,7 @@ from typing import List
 from typing_extensions import Self
 from dataclasses import dataclass
 import random
+import time
 
 
 def softmax(x: NDArray, axis: int) -> NDArray:
@@ -175,7 +176,8 @@ class MTRNode(Node):
             break_distance=break_distance,
             center_offset=center_offset,
         )
-
+        self._batch_polylines = None
+        self._batch_polylines_mask = None
         self._label_ids = [AgentLabel.from_str(label).value for label in labels]
 
         cfg = Config.from_file(model_config_path)
@@ -448,9 +450,13 @@ class MTRNode(Node):
         Returns:
 
         """
+        if self._batch_polylines is None or self._batch_polylines_mask is None:
+            polyline_info, self._batch_polylines, self._batch_polylines_mask = self._preprocess_polyline(
+                static_map=self._awml_static_map, target_state=current_ego, num_target=1, batch_polylines=None, batch_polylines_mask=None)
+        else:
+            polyline_info, _, __ = self._preprocess_polyline(
+                static_map=self._awml_static_map, target_state=current_ego, num_target=1, batch_polylines=self._batch_polylines, batch_polylines_mask=self._batch_polylines_mask)
 
-        polyline_info = self._preprocess_polyline(
-            static_map=self._awml_static_map, target_state=current_ego, num_target=1)
         sorted_histories = order_from_closest_to_furthest(
             current_ego, self._history.histories.values())
         relative_histories = get_relative_histories(

@@ -7,6 +7,7 @@ import numpy as np
 from awml_pred.common import TRANSFORMS
 from awml_pred.ops import rotate_points_along_z
 from autoware_mtr.dataclass.agent import AgentState
+import time
 
 
 if TYPE_CHECKING:
@@ -155,7 +156,7 @@ class TargetCentricPolyline:
 
         return ret_polylines, ret_polylines_mask
 
-    def __call__(self, static_map: AWMLStaticMap, target_state: AgentState, num_target: int) -> dict:
+    def __call__(self, static_map: AWMLStaticMap, target_state: AgentState, num_target: int,  batch_polylines=None, batch_polylines_mask=None) -> dict:
         """Run transformation.
 
         Args:
@@ -168,10 +169,9 @@ class TargetCentricPolyline:
 
         """
 
-        current_target = target_state
-
-        all_polylines: NDArrayF32 = static_map.get_all_polyline(as_array=True, full=True)
-        batch_polylines, batch_polylines_mask = self._generate_batch(all_polylines)
+        if batch_polylines is None or batch_polylines_mask is None:
+            all_polylines: NDArrayF32 = static_map.get_all_polyline(as_array=True, full=True)
+            batch_polylines, batch_polylines_mask = self._generate_batch(all_polylines)
 
         ret_polylines: NDArrayF32
         ret_polylines_mask: NDArrayBool
@@ -187,10 +187,10 @@ class TargetCentricPolyline:
             )
             center_offset = rotate_points_along_z(
                 points=center_offset.reshape(num_target, 1, 2),
-                angle=current_target.yaw,
+                angle=target_state.yaw,
             ).reshape(num_target, 2)
 
-            center_pos = current_target.xy + center_offset
+            center_pos = target_state.xy + center_offset
             distances: NDArrayF32 = np.linalg.norm(
                 center_pos[:, None, :] - polyline_center[None, ...], axis=-1)
             topk_idxs = np.argsort(distances, axis=1)[:, : self.num_polylines]
@@ -199,13 +199,11 @@ class TargetCentricPolyline:
         else:
             ret_polylines = batch_polylines[None, ...].repeat(num_target, axis=0)
             ret_polylines_mask = batch_polylines_mask[None, ...].repeat(num_target, axis=0)
-
         ret_polylines, ret_polylines_mask = self._do_transform(
-            ret_polylines, ret_polylines_mask, current_target, num_target)
-
+            ret_polylines, ret_polylines_mask, target_state, num_target)
         info: dict = {}
         info["polylines"] = ret_polylines
         info["polylines_mask"] = ret_polylines_mask > 0
         info["polyline_centers"] = self._load_polyline_center(ret_polylines, ret_polylines_mask)
 
-        return info
+        return info, batch_polylines, batch_polylines_mask
