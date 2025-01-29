@@ -310,7 +310,7 @@ class MTRNode(Node):
         past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
         last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
         past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
-        past_Vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
+        past_vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
         yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
         timestamps = np.arange(0, num_time * 0.1, 0.1, dtype=np.float32)
         time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
@@ -338,14 +338,14 @@ class MTRNode(Node):
                     yaw_embed[b, n, t, 0] = np.sin(state.yaw)
                     yaw_embed[b, n, t, 1] = np.cos(state.yaw)
 
-                    past_Vxy[b, n, t, 0] = state.vxy[0]
-                    past_Vxy[b, n, t, 1] = state.vxy[1]
+                    past_vxy[b, n, t, 0] = state.vxy[0]
+                    past_vxy[b, n, t, 1] = state.vxy[1]
                     past_xyz_size[b, n, t, 0] = state.size[0]
                     past_xyz_size[b, n, t, 1] = state.size[1]
                     past_xyz_size[b, n, t, 2] = state.size[2]
                     trajectory_mask[b, n, t] = state.is_valid
 
-        vel_diff = np.diff(past_Vxy, axis=2, prepend=past_Vxy[..., 0, :][:, :, None, :])
+        vel_diff = np.diff(past_vxy, axis=2, prepend=past_vxy[..., 0, :][:, :, None, :])
         accel = vel_diff / 0.1
         accel[:, :, 0, :] = accel[:, :, 1, :]
 
@@ -356,7 +356,7 @@ class MTRNode(Node):
                 type_onehot,
                 time_embed,
                 yaw_embed,
-                past_Vxy,
+                past_vxy,
                 accel,
             ),
             axis=-1,
