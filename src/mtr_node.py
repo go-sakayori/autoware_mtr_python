@@ -212,30 +212,32 @@ class MTRNode(Node):
         self._history.update_state(current_ego, info)
         pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
 
+        if self.count < self._num_timestamps:
+            self.count = self.count + 1
+            return
+
         # pre-process
         past_embed, polyline_info, ego_last_xyz, trajectory_mask = self._preprocess(current_ego)
-        if self.count > self._num_timestamps:
-            num_target, num_agent, num_time, num_feat = past_embed.shape
-            pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-            pre_processed_input["obj_trajs_mask"] = trajectory_mask
-            pre_processed_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
-            pre_processed_input["map_polylines_mask"] = torch.Tensor(
-                polyline_info["polylines_mask"]).cuda()
-            pre_processed_input["map_polylines_center"] = torch.Tensor(
-                polyline_info["polyline_centers"]).cuda()
-            pre_processed_input["obj_trajs_last_pos"] = torch.Tensor(
-                ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
-            pre_processed_input["intention_points"] = torch.Tensor(
-                self._intention_points["intention_points"]).cuda()
+        num_target, num_agent, num_time, num_feat = past_embed.shape
+        pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
+        pre_processed_input["obj_trajs_mask"] = trajectory_mask
+        pre_processed_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
+        pre_processed_input["map_polylines_mask"] = torch.Tensor(
+            polyline_info["polylines_mask"]).cuda()
+        pre_processed_input["map_polylines_center"] = torch.Tensor(
+            polyline_info["polyline_centers"]).cuda()
+        pre_processed_input["obj_trajs_last_pos"] = torch.Tensor(
+            ego_last_xyz.reshape((num_target, num_agent, 3))).cuda()
+        pre_processed_input["intention_points"] = torch.Tensor(
+            self._intention_points["intention_points"]).cuda()
+        pre_processed_input["track_index_to_predict"] = torch.arange(
+            0, num_target, dtype=torch.int32).cuda()
 
-        if self.count <= self._num_timestamps:
-            self.count = self.count + 1
-        # # inference
-
+        # inference
         with torch.no_grad():
             pred_scores, pred_trajs = self.model(**pre_processed_input)
 
-        # # post-process
+        # post-process
         pred_scores, pred_trajs = self._postprocess(pred_scores, pred_trajs)
         ego_traj = to_trajectory(header=msg.header,
                                  infos=[info],
