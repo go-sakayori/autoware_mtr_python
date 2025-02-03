@@ -213,12 +213,11 @@ class MTRNode(Node):
             size=self.ego_dimensions,
         )
         self._history.update_state(current_ego, info)
-        pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
 
         if self.count < self._num_timestamps:
             self.count = self.count + 1
             return
-
+        pre_processed_input = {}
         # pre-process
         past_embed, polyline_info, ego_last_xyz, trajectory_mask = self._preprocess(current_ego)
         num_target, num_agent, num_time, num_feat = past_embed.shape
@@ -368,67 +367,6 @@ class MTRNode(Node):
             dtype=np.float32,
         )
         return embedded_inputs, last_xyz, trajectory_mask
-
-    def get_ego_past(self, ego_history:  deque[AgentState]):
-
-        num_target, num_agent, num_time = 1, 1, 11
-        num_type = 3
-
-        ego_past_xyz = np.ones((num_target, num_agent, num_time, 3), dtype=np.float32)
-        ego_last_xyz = np.ones((num_target, num_agent, 1, 3), dtype=np.float32)
-        ego_past_Vxy = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
-        ego_past_xyz_size = np.ones((num_target, num_agent, num_time, 3), dtype=np.int32)
-        yaw_embed = np.ones((num_target, num_agent, num_time, 2), dtype=np.float32)
-
-        ego_timestamps = np.ones((num_time), dtype=np.float32)
-        for i, ego_state in enumerate(ego_history):
-            ego_past_xyz[0, 0, i, 0] = ego_state.xyz[0]
-            ego_past_xyz[0, 0, i, 1] = ego_state.xyz[1]
-            ego_past_xyz[0, 0, i, 2] = ego_state.xyz[2]
-            ego_last_xyz = ego_state.xyz
-
-            yaw_embed[0, 0, i, 0] = np.sin(ego_state.yaw)
-            yaw_embed[0, 0, i, 1] = np.cos(ego_state.yaw)
-
-            ego_past_Vxy[0, 0, i, 0] = ego_state.vxy[0]
-            ego_past_Vxy[0, 0, i, 1] = ego_state.vxy[1]
-            ego_past_xyz_size[0, 0, i, 0] = 4.0
-            ego_past_xyz_size[0, 0, i, 1] = 2.0
-            ego_past_xyz_size[0, 0, i, 2] = 1.0
-            ego_timestamps[i] = i * 0.1
-
-        time_embed = np.zeros((num_target, num_agent, num_time, num_time + 1), dtype=np.float32)
-        time_embed[:, :, np.arange(num_time), np.arange(num_time)] = 1
-        time_embed[0, 0, :num_time, -1] = ego_timestamps
-
-        types = ["VEHICLE", "PEDESTRIAN", "CYCLIST"]
-        type_onehot = np.zeros((num_target, num_agent, num_time, num_type + 2), dtype=np.float32)
-        type_onehot[np.arange(num_target), 0, :, num_type] = 1  # target indices replaced by 0
-        type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
-        type_onehot[:, 0, :, 0] = 1             # Set ego as a vehicle type
-        vel_diff = np.diff(ego_past_Vxy, axis=2, prepend=ego_past_Vxy[..., 0, :][:, :, None, :])
-        time_passed = ego_timestamps[-1] - ego_timestamps[0]
-
-        # accel
-        # TODO: use accurate timestamp diff
-        avg_time = time_passed / ego_timestamps.size
-        accel = vel_diff / avg_time
-        accel[:, :, 0, :] = accel[:, :, 1, :]
-
-        past_embed = np.concatenate(
-            (
-                ego_past_xyz,
-                ego_past_xyz_size,
-                type_onehot,
-                time_embed,
-                yaw_embed,
-                ego_past_Vxy,
-                accel,
-            ),
-            axis=-1,
-            dtype=np.float32,
-        )
-        return past_embed, ego_last_xyz
 
     def _preprocess(
         self,
