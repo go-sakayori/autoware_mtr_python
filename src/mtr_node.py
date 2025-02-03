@@ -146,6 +146,9 @@ class MTRNode(Node):
             .string_value
         )
 
+        self.ego_dimensions = (self.declare_parameter(
+            "ego_dimensions", descriptor=descriptor).get_parameter_value().double_array_value)
+
         self._num_timestamps = num_timestamp
         self._history = AgentHistory(max_length=num_timestamp)
         self._awml_static_map: AWMLStaticMap = convert_lanelet(lanelet_file)
@@ -207,7 +210,7 @@ class MTRNode(Node):
             msg,
             uuid=self._ego_uuid,
             label_id=AgentLabel.VEHICLE,
-            size=(4.0, 2.0, 1.0),
+            size=self.ego_dimensions,
         )
         self._history.update_state(current_ego, info)
         pre_processed_input = _load_inputs(self.deploy_cfg.input_shapes)
