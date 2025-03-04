@@ -11,3 +11,6 @@ build/*
 install/*
 log/*
 *__pycache__
+*.so
+autoware_mtr_python.egg-info/
+projects/MTR/build/temp.linux-x86_64-3.10/
