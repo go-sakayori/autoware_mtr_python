@@ -269,20 +269,6 @@ class MTRNode(Node):
         _, num_polylines, num_points, point_dim = polylines.shape if len(
             polylines.shape) == 4 else (1, polylines.shape[0], polylines.shape[1], polylines
                                         .shape[2])
-
-        # # add ego translation to first 3 values
-        # polylines[..., :3] += ego_state.xyz
-        # # add ego translation to last 2 values (9 values total)
-        # polylines[..., 7:9] += ego_state.xy
-        # polylines[..., :2] = rotate_points_along_z(
-        #     points=polylines[..., 0:2].reshape(1, -1, 2),
-        #     angle=-ego_state.yaw,
-        # ).reshape(1, -1, 20, 2)
-        # polylines[..., 3:5] = rotate_points_along_z(
-        #     points=polylines[..., 3:5].reshape(1, -1, 2),
-        #     angle=-ego_state.yaw,
-        # ).reshape(1, -1, 20, 2)
-
         for i in range(num_polylines):
             marker = Marker()
             marker.type = marker.LINE_STRIP
@@ -303,7 +289,7 @@ class MTRNode(Node):
             marker.frame_locked = True
 
             marker.points = []
-            polyline = polylines[0][i]
+            polyline = polylines[0][i] if len(polylines.shape) == 4 else polylines[i]
             for p in polyline:
                 if np.linalg.norm(p[:2]) < 1e-3:
                     continue
@@ -311,47 +297,17 @@ class MTRNode(Node):
                 tmp_point.x = float(p[0])
                 tmp_point.y = float(p[1])
                 tmp_point.z = 0.0
-
-                tmp_point_end = Point()
-                tmp_point_end.x = float(p[-2])
-                tmp_point_end.y = float(p[-1])
-                tmp_point_end.z = 0.0
                 marker.points.append(tmp_point)
-                marker.points.append(tmp_point_end)
+
+                if (point_dim == 9):
+                    tmp_point_end = Point()
+                    tmp_point_end.x = float(p[-2])
+                    tmp_point_end.y = float(p[-1])
+                    tmp_point_end.z = 0.0
+                    marker.points.append(tmp_point_end)
 
             marker_array.markers.append(marker)
         self._debug_polylines_pub.publish(marker_array)
-
-        # for i in range(self.controller.mppi_candidates.shape[0]):
-        #     marker = Marker()
-        #     marker.type = marker.LINE_STRIP
-        #     marker.header.stamp = cmd_msg.stamp
-        #     marker.header.frame_id = "map"
-        #     marker.id = i
-        #     marker.action = marker.ADD
-
-        #     marker.scale.x = 0.05
-        #     marker.scale.y = 0.0
-        #     marker.scale.z = 0.0
-
-        #     marker.color.a = 1.0
-        #     marker.color.r = np.random.uniform()
-        #     marker.color.g = np.random.uniform()
-        #     marker.color.b = np.random.uniform()
-
-        #     marker.lifetime.nanosec = 500000000
-        #     marker.frame_locked = True
-
-        #     marker.points = []
-
-        #     for j in range(self.controller.mppi_candidates.shape[1]):
-        #         tmp_point = Point()
-        #         tmp_point.x = self.controller.mppi_candidates[i, j, 0]
-        #         tmp_point.y = self.controller.mppi_candidates[i, j, 1]
-        #         tmp_point.z = self._present_kinematic_state.pose.pose.position.z
-        #         marker.points.append(tmp_point)
-        #     marker_array.markers.append(marker)
-        # self.debug_mpc_sampling_paths_marker_array_.publish(marker_array)
 
     def _parameter_callback(self, params):
         for param in params:
