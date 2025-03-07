@@ -185,7 +185,7 @@ class TargetCentricPolyline:
 
         return ret_polylines, ret_polylines_mask
 
-    def __call__(self, static_map: AWMLStaticMap, target_state: AgentState, num_target: int,  batch_polylines=None, batch_polylines_mask=None) -> dict:
+    def __call__(self, static_map: AWMLStaticMap, target_state: AgentState, num_target: int,  batch_polylines=None, batch_polylines_mask=None, polyline_center: NDArrayF32 | None = None) -> dict:
         """Run transformation.
 
         Args:
@@ -205,10 +205,11 @@ class TargetCentricPolyline:
         ret_polylines: NDArrayF32
         ret_polylines_mask: NDArrayBool
         if len(batch_polylines) > self.num_polylines:
-            polyline_center: NDArrayF32 = np.array([
-                self._load_polyline_center(polyline, mask)
-                for polyline, mask in zip(batch_polylines, batch_polylines_mask)
-            ])[..., :2]
+            if polyline_center is None:
+                polyline_center: NDArrayF32 = np.array([
+                    self._load_polyline_center(polyline, mask)
+                    for polyline, mask in zip(batch_polylines, batch_polylines_mask)
+                ])[..., :2]
 
             center_offset: NDArrayF32 = np.array(self.center_offset, dtype=np.float32)[None, :].repeat(
                 num_target,
@@ -233,8 +234,10 @@ class TargetCentricPolyline:
         info: dict = {}
         info["polylines"] = ret_polylines
         info["polylines_mask"] = ret_polylines_mask > 0
+
         info["polyline_centers"] = np.array([[
             self._load_polyline_center(polyline, mask)
             for polyline, mask in zip(ret_polyline, ret_polyline_mask)
         ] for ret_polyline, ret_polyline_mask in zip(ret_polylines, ret_polylines_mask)])
-        return info, batch_polylines, batch_polylines_mask
+
+        return info, batch_polylines, batch_polylines_mask, polyline_center

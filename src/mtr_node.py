@@ -5,6 +5,7 @@ from collections import deque
 from copy import deepcopy
 import numpy as np
 import math
+import time
 
 from scipy.interpolate import interp1d
 from typing import List
@@ -228,6 +229,7 @@ class MTRNode(Node):
         )
         self._batch_polylines = None
         self._batch_polylines_mask = None
+        self._polyline_center = None
         self._prev_trajectory: Trajectory | None = None
         self._last_ego: AgentState | None = None
         self._label_ids = [AgentLabel.from_str(label).value for label in labels]
@@ -501,6 +503,8 @@ class MTRNode(Node):
         return biased_states, biased_infos, biased_histories, uuids
 
     def _callback(self, msg: Odometry) -> None:
+
+        start = time.perf_counter()
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
@@ -560,6 +564,8 @@ class MTRNode(Node):
             header.frame_id = "map"
             self._pub_debug_polylines(self._batch_polylines,
                                       self._batch_polylines_mask, header)
+        end = time.perf_counter()
+        print(f"Execution time: {end - start:.6f} seconds")
 
     def _postprocess(
         self,
@@ -687,8 +693,8 @@ class MTRNode(Node):
         Returns:
 
         """
-        polyline_info, self._batch_polylines, self._batch_polylines_mask = self._preprocess_polyline(
-            static_map=self._awml_static_map, target_state=current_ego, num_target=1, batch_polylines=self._batch_polylines, batch_polylines_mask=self._batch_polylines_mask)
+        polyline_info, self._batch_polylines, self._batch_polylines_mask, self._polyline_center = self._preprocess_polyline(
+            static_map=self._awml_static_map, target_state=current_ego, num_target=1, batch_polylines=self._batch_polylines, batch_polylines_mask=self._batch_polylines_mask, polyline_center=self._polyline_center)
 
         sorted_histories = order_from_closest_to_furthest(
             current_ego, history.histories.values())
