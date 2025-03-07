@@ -503,8 +503,6 @@ class MTRNode(Node):
         return biased_states, biased_infos, biased_histories, uuids
 
     def _callback(self, msg: Odometry) -> None:
-
-        start = time.perf_counter()
         # remove invalid ancient agent history
         timestamp = timestamp2ms(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
@@ -564,8 +562,6 @@ class MTRNode(Node):
             header.frame_id = "map"
             self._pub_debug_polylines(self._batch_polylines,
                                       self._batch_polylines_mask, header)
-        end = time.perf_counter()
-        print(f"Execution time: {end - start:.6f} seconds")
 
     def _postprocess(
         self,
