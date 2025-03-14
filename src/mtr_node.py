@@ -272,7 +272,6 @@ class MTRNode(Node):
         self.add_on_set_parameters_callback(self._parameter_callback)
 
     def _pub_debug_polylines(self, polylines: NDArray, polylines_mask: NDArray, header: Header, ego_state: AgentState | None = None, polyline_centers: NDArray | None = None):
-
         marker_array = MarkerArray()
         _, num_polylines, num_points, point_dim = polylines.shape if len(
             polylines.shape) == 4 else (1, polylines.shape[0], polylines.shape[1], polylines
@@ -299,19 +298,13 @@ class MTRNode(Node):
                 if not m:
                     continue
                 marker.color.r, marker.color.g, marker.color.b, marker.color.a = MAP_TYPE_COLORS[int(
-                    p[-3])]
+                    p[-3])] if point_dim == 9 else MAP_TYPE_COLORS[int(
+                        p[-1])]
                 tmp_point = Point()
                 tmp_point.x = float(p[0])
                 tmp_point.y = float(p[1])
                 tmp_point.z = 0.2
                 marker.points.append(tmp_point)
-
-                if (point_dim == 9):
-                    tmp_point_end = Point()
-                    tmp_point_end.x = float(p[-2])
-                    tmp_point_end.y = float(p[-1])
-                    tmp_point_end.z = 0.2
-                    marker.points.append(tmp_point_end)
 
             marker_array.markers.append(marker)
 
