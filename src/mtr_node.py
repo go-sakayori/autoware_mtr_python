@@ -44,10 +44,8 @@ from geometry_msgs.msg import Point
 from autoware_perception_msgs.msg import TrackedObject
 from autoware_perception_msgs.msg import TrackedObjects
 
-from awml_pred.dataclass import AWMLStaticMap
 from awml_pred.common import Config, load_checkpoint
 from awml_pred.models import build_model
-from awml_pred.deploy.apis.torch2onnx import _load_inputs
 from utils.lanelet_converter import convert_lanelet
 from utils.constant import MAP_TYPE_COLORS
 from utils.load import LoadIntentionPoint
@@ -55,6 +53,7 @@ from autoware_mtr.conversion.ego import from_odometry, from_trajectory_point
 from autoware_mtr.conversion.tracked_object import from_tracked_objects
 from autoware_mtr.conversion.misc import timestamp2ms, yaw_from_quaternion
 from autoware_mtr.conversion.trajectory import get_relative_histories, order_from_closest_to_furthest, to_trajectories, _yaw_to_quaternion
+from autoware_mtr.dataclass.static_map import AWMLStaticMap
 from autoware_mtr.datatype import AgentLabel
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.history import AgentHistory
@@ -112,20 +111,8 @@ class MTRNode(Node):
         # ROS parameters
         descriptor = ParameterDescriptor(dynamic_typing=True)
 
-        build_only = (
-            self.declare_parameter("build_only", descriptor=descriptor)
-            .get_parameter_value()
-            .bool_value
-        )
-
         model_config_path = (
             self.declare_parameter("model_config", descriptor=descriptor)
-            .get_parameter_value()
-            .string_value
-        )
-
-        deploy_config_path = (
-            self.declare_parameter("deploy_config", descriptor=descriptor)
             .get_parameter_value()
             .string_value
         )
@@ -247,10 +234,7 @@ class MTRNode(Node):
         self.model.eval()
         self.model.cuda()
         self.model, _ = load_checkpoint(self.model, checkpoint_path, is_distributed=is_distributed)
-        self.deploy_cfg = Config.from_file(deploy_config_path)
         self.count = 0
-        if build_only:
-            exit(0)
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
