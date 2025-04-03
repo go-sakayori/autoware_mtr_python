@@ -255,30 +255,6 @@ class MTRNode(Node):
             1,
         )
 
-        import pickle
-        import os
-        file_path = os.path.join(os.path.dirname(__file__), "batch_input0.pkl")
-        from awml_pred.common import items2device
-
-        with open(file_path, "rb") as file:
-            self.loaded_data = pickle.load(file)
-            self.loaded_data["obj_trajs"] = torch.Tensor(
-                np.array(self.loaded_data["obj_trajs"])).cuda()[0:1]
-            self.loaded_data["obj_trajs_mask"] = torch.Tensor(
-                np.array(self.loaded_data["obj_trajs_mask"])).cuda()[0:1]
-            self.loaded_data["map_polylines"] = torch.Tensor(
-                np.array(self.loaded_data["map_polylines"])).cuda()[0:1]
-            self.loaded_data["map_polylines_mask"] = torch.Tensor(
-                np.array(self.loaded_data["map_polylines_mask"])).cuda()[0:1]
-            self.loaded_data["map_polylines_center"] = torch.Tensor(
-                np.array(self.loaded_data["map_polylines_center"])).cuda()[0:1]
-            self.loaded_data["obj_trajs_last_pos"] = torch.Tensor(
-                np.array(self.loaded_data["obj_trajs_last_pos"])).cuda()[0:1]
-            self.loaded_data["intention_points"] = torch.Tensor(  # ???????
-                np.array(self.loaded_data["intention_points"])).cuda()[0:1]
-            self.loaded_data["track_index_to_predict"] = torch.tensor(
-                np.array(self.loaded_data["track_index_to_predict"]), dtype=torch.long).cuda()[0:1]
-
         # Add a callback for parameter changes
         self.add_on_set_parameters_callback(self._parameter_callback)
 
