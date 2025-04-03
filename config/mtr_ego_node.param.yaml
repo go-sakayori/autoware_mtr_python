@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     num_timestamp: 11 # the number of past frames
-    timestamp_threshold: 1000000.0 # [us]
+    timestamp_threshold: 10000000000000.0 # [us]
     score_threshold: 0.0 # threshold of predicted score
     labels: ["VEHICLE"] # only ego vehicle is considered
     ego_dimensions: [4.0,2.0,1.7] # [length, width, height]

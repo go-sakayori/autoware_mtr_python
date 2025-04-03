@@ -64,21 +64,6 @@ from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
 
-def softmax(x: NDArray, axis: int) -> NDArray:
-    """Apply softmax.
-
-    Args:
-        x (NDArray): Input array.
-        axis (int): Axis to apply softmax.
-
-    Returns:
-        NDArray: Softmax result.
-    """
-    x -= x.max(axis=axis, keepdims=True)
-    x_exp = np.exp(x)
-    return x_exp / x_exp.sum(axis=axis, keepdims=True)
-
-
 class MTRNode(Node):
     def __init__(self) -> None:
         super().__init__("mtr_python_node")
@@ -579,7 +564,6 @@ class MTRNode(Node):
         pred_trajs[:, :, :, 0:2] += current_agent.xy[:, None, None, :]
 
         # sort by score
-        pred_scores = softmax(pred_scores, axis=1)
         sort_indices = np.argsort(-pred_scores, axis=1)
         pred_scores = np.take_along_axis(pred_scores, sort_indices, axis=1)
         pred_trajs = np.take_along_axis(pred_trajs, sort_indices[..., None, None], axis=1)
@@ -713,9 +697,9 @@ class MTRNode(Node):
 
         sorted_histories = order_from_closest_to_furthest(
             current_ego, history.histories.values())
+        sorted_histories = self.recalculate_history_velocities(sorted_histories)
         relative_histories = get_relative_histories(
             [current_ego], sorted_histories)
-        relative_histories = self.recalculate_history_velocities(relative_histories)
         embedded_inputs, last_xyz, trajectory_mask = self.get_embedded_inputs(relative_histories, [
             0])
         return embedded_inputs, polyline_info, last_xyz, trajectory_mask
