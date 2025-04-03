@@ -51,7 +51,7 @@ from utils.constant import MAP_TYPE_COLORS
 from utils.load import LoadIntentionPoint
 from autoware_mtr.conversion.ego import from_odometry, from_trajectory_point
 from autoware_mtr.conversion.tracked_object import from_tracked_objects
-from autoware_mtr.conversion.misc import timestamp2ms, yaw_from_quaternion
+from autoware_mtr.conversion.misc import timestamp2us, yaw_from_quaternion
 from autoware_mtr.conversion.trajectory import get_relative_histories, order_from_closest_to_furthest, to_trajectories, _yaw_to_quaternion
 from autoware_mtr.dataclass.static_map import AWMLStaticMap
 from autoware_mtr.datatype import AgentLabel
@@ -101,13 +101,14 @@ class MTRNode(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1,
         )
-        self._subscription = self.create_subscription(
+        self._odometry_subscription = self.create_subscription(
             Odometry,
             "~/input/ego",
-            self._callback,
+            self._odometry_callback,
             qos_profile,
         )
 
+        self._timer = self.create_timer(0.1, self._callback)
         # ROS parameters
         descriptor = ParameterDescriptor(dynamic_typing=True)
 
@@ -199,6 +200,7 @@ class MTRNode(Node):
         self._history = AgentHistory(max_length=num_timestamp)
         self._future_propagated_history = AgentHistory(max_length=num_timestamp)
         self._awml_static_map: AWMLStaticMap = convert_lanelet(lanelet_file)
+        self.current_ego, self.current_ego_info = None, None
 
         intention_point_loader: LoadIntentionPoint = LoadIntentionPoint(
             intention_point_file, labels)
@@ -231,9 +233,10 @@ class MTRNode(Node):
 
         # Load Model
         self.model = build_model(cfg.model)
-        self.model.eval()
-        self.model.cuda()
         self.model, _ = load_checkpoint(self.model, checkpoint_path, is_distributed=is_distributed)
+        self.model.cuda()
+        self.model.eval()
+
         self.count = 0
 
         self._tf_buffer = Buffer()
@@ -251,6 +254,30 @@ class MTRNode(Node):
             "/debug_polylines",
             1,
         )
+
+        import pickle
+        import os
+        file_path = os.path.join(os.path.dirname(__file__), "batch_input0.pkl")
+        from awml_pred.common import items2device
+
+        with open(file_path, "rb") as file:
+            self.loaded_data = pickle.load(file)
+            self.loaded_data["obj_trajs"] = torch.Tensor(
+                np.array(self.loaded_data["obj_trajs"])).cuda()[0:1]
+            self.loaded_data["obj_trajs_mask"] = torch.Tensor(
+                np.array(self.loaded_data["obj_trajs_mask"])).cuda()[0:1]
+            self.loaded_data["map_polylines"] = torch.Tensor(
+                np.array(self.loaded_data["map_polylines"])).cuda()[0:1]
+            self.loaded_data["map_polylines_mask"] = torch.Tensor(
+                np.array(self.loaded_data["map_polylines_mask"])).cuda()[0:1]
+            self.loaded_data["map_polylines_center"] = torch.Tensor(
+                np.array(self.loaded_data["map_polylines_center"])).cuda()[0:1]
+            self.loaded_data["obj_trajs_last_pos"] = torch.Tensor(
+                np.array(self.loaded_data["obj_trajs_last_pos"])).cuda()[0:1]
+            self.loaded_data["intention_points"] = torch.Tensor(  # ???????
+                np.array(self.loaded_data["intention_points"])).cuda()[0:1]
+            self.loaded_data["track_index_to_predict"] = torch.tensor(
+                np.array(self.loaded_data["track_index_to_predict"]), dtype=torch.long).cuda()[0:1]
 
         # Add a callback for parameter changes
         self.add_on_set_parameters_callback(self._parameter_callback)
@@ -337,7 +364,7 @@ class MTRNode(Node):
         num_target, num_agent, num_time, num_feat = past_embed.shape
         pre_processed_input = {}
         pre_processed_input["obj_trajs"] = torch.Tensor(past_embed).cuda()
-        pre_processed_input["obj_trajs_mask"] = trajectory_mask
+        pre_processed_input["obj_trajs_mask"] = trajectory_mask.cuda()
         pre_processed_input["map_polylines"] = torch.Tensor(polyline_info["polylines"]).cuda()
         pre_processed_input["map_polylines_mask"] = torch.Tensor(
             polyline_info["polylines_mask"]).cuda()
@@ -350,14 +377,6 @@ class MTRNode(Node):
         pre_processed_input["track_index_to_predict"] = torch.arange(
             0, num_target, dtype=torch.int32).cuda()
         return pre_processed_input
-
-    def _previous_trajectory_callback(self, msg: Trajectory) -> None:
-        self._prev_trajectory = msg
-
-    def _tracked_objects_callback(self, msg: TrackedObjects) -> None:
-        timestamp = timestamp2ms(msg.header)
-        states, infos = from_tracked_objects(msg)
-        self._history.update(states, infos)
 
     def _do_predictions(self, true_ego_state: AgentState, ego_states: List[AgentState], infos: List[OriginalInfo], histories: List[AgentHistory], requires_concatenation: List[bool], uuids: List[RosUUID]):
         header = Header()
@@ -376,12 +395,12 @@ class MTRNode(Node):
         for ego_state, info, history, concatenate, uuid in zip(ego_states, infos, histories, requires_concatenation, uuids):
             pre_processed_input = self._create_pre_processed_input(ego_state, history)
             # inference
+            current_target_trajectory, _ = history.target_as_trajectory(
+                uuid, latest=True)
             with torch.no_grad():
                 pred_scores, pred_trajs = self.model(**pre_processed_input)
 
             # post-process
-            current_target_trajectory, _ = history.target_as_trajectory(
-                uuid, latest=True)
             pred_scores, pred_trajs = self._postprocess(
                 pred_scores, pred_trajs, current_target_trajectory)
 
@@ -414,8 +433,8 @@ class MTRNode(Node):
                 if np.linalg.norm(ego_state.xy - true_ego_state.xy) > 1e-3:
                     continue
                 header_map = Header()
-                header_map .stamp = self.get_clock().now().to_msg()
-                header_map .frame_id = "base_link"
+                header_map.stamp = self.get_clock().now().to_msg()
+                header_map.frame_id = "base_link"
                 self._pub_debug_polylines(pre_processed_input["map_polylines"].cpu().detach().numpy(),
                                           pre_processed_input["map_polylines_mask"].cpu().detach().numpy(), header_map, None, pre_processed_input["map_polylines_center"].cpu().detach().numpy())
         return out_trajectories, out_objects
@@ -478,31 +497,42 @@ class MTRNode(Node):
             biased_histories.append(biased_history)
         return biased_states, biased_infos, biased_histories, uuids
 
-    def _callback(self, msg: Odometry) -> None:
-        # remove invalid ancient agent history
-        timestamp = timestamp2ms(msg.header)
+    def _previous_trajectory_callback(self, msg: Trajectory) -> None:
+        self._prev_trajectory = msg
+
+    def _tracked_objects_callback(self, msg: TrackedObjects) -> None:
+        timestamp = timestamp2us(msg.header)
+        states, infos = from_tracked_objects(msg)
+        self._history.update(states, infos)
+
+    def _odometry_callback(self, msg: Odometry) -> None:
+        timestamp = timestamp2us(msg.header)
         self._history.remove_invalid(timestamp, self._timestamp_threshold)
 
         # update agent history
-        current_ego, info = from_odometry(
+        self.current_ego, self.current_ego_info = from_odometry(
             msg,
             uuid=self._ego_uuid,
             label_id=AgentLabel.VEHICLE,
             size=self.ego_dimensions,
         )
+        self.current_odometry = deepcopy(msg)
 
-        self._history.update_state(current_ego, info)
-
+    def _callback(self) -> None:
+        # remove invalid ancient agent history
+        if self.current_ego is None or self.current_ego_info is None:
+            return
+        self._history.update_state(self.current_ego, self.current_ego_info)
         if self.count < self._num_timestamps:
             self.count = self.count + 1
             return
 
-        true_ego_state = deepcopy(current_ego)
-        ego_states = [current_ego]
-        infos = [info]
-        histories = [self._history]
+        true_ego_state = deepcopy(self.current_ego)
+        ego_states = [deepcopy(self.current_ego)]
+        infos = [deepcopy(self.current_ego_info)]
+        histories = [deepcopy(self._history)]
         requires_concatenation = [False]
-        uuids = [self._ego_uuid]
+        uuids = [deepcopy(self._ego_uuid)]
 
         propagation_required = self.propagate_future_states or self.add_left_bias_history or self.add_right_bias_history
 
@@ -531,7 +561,6 @@ class MTRNode(Node):
 
         self._ego_trajectories_publisher.publish(ego_multiple_trajs)
         self._publisher.publish(pred_objs)
-        self._last_ego = current_ego
         if self._publish_debug_polyline_batch:
             header = Header()
             header.stamp = self.get_clock().now().to_msg()
@@ -558,21 +587,20 @@ class MTRNode(Node):
         """
         if isinstance(pred_scores, torch.Tensor):
             pred_scores = pred_scores.cpu().detach().numpy()
-        if isinstance(pred_trajs, torch.Tensor):
-            pred_trajs = pred_trajs.cpu().detach().numpy()
-        # predicted traj point info is X,Y,Xmean,Ymean,Variance,Vx,Vy
 
-        num_agent, num_mode, num_future, num_feat = pred_trajs.shape
+        # predicted traj point info is X,Y,Xmean,Ymean,Variance,Vx,Vy
+        num_all_batch, num_mode, num_future, num_feat = pred_trajs.shape
         assert num_feat == 7, f"Expected predicted feature is (X, Y, Xmean, Ymean, Variance, Vx, Vy), but got {num_feat}"
 
         # transform from agent centric coords to world coords
 
         # first 2 elements are xy then we use the negative ego rotation. reshape, I dont know
         # each trajectory is in  the ref frame of its own agent. For ego we might use TF ?
-        pred_trajs[..., :2] = rotate_along_z(
-            pred_trajs.reshape(num_agent, -1, num_feat)[..., :2], -current_agent.yaw
-        ).reshape(num_agent, num_mode, num_future, 2)
-        pred_trajs[..., :2] += current_agent.xy[:, None, None, :]
+        pred_trajs = rotate_along_z(
+            points=pred_trajs.view(num_all_batch, num_mode * num_future, num_feat).cpu().numpy(), angle=current_agent.yaw
+        ).reshape(num_all_batch, num_mode, num_future, num_feat)
+
+        pred_trajs[:, :, :, 0:2] += current_agent.xy[:, None, None, :]
 
         # sort by score
         pred_scores = softmax(pred_scores, axis=1)
@@ -595,7 +623,7 @@ class MTRNode(Node):
 
         past_xyz = np.ones((B, N, T, 3), dtype=np.float32)
         last_xyz = np.ones((B, N, 1, 3), dtype=np.float32)
-        past_xyz_size = np.ones((B, N, T, 3), dtype=np.int32)
+        past_xyz_size = np.ones((B, N, T, 3), dtype=np.float32)
         past_vxy = np.ones((B, N, T, 2), dtype=np.float32)
         yaw_embed = np.ones((B, N, T, 2), dtype=np.float32)
         timestamps = np.arange(0, T * 0.1, 0.1, dtype=np.float32)
@@ -608,8 +636,7 @@ class MTRNode(Node):
         type_onehot[:, 0, :, num_type + 1] = 1             # scenario.ego_index replaced by 0
 
         trajectory_mask = torch.ones(
-            [B, N, T], dtype=torch.bool).cuda()
-
+            [B, N, T], dtype=torch.bool)
         for b in range(len(target_ids)):
             for n in range(len(agent_histories)):
                 history = agent_histories[b * N + n]
@@ -631,6 +658,15 @@ class MTRNode(Node):
                     past_xyz_size[b, n, t, 2] = state.size[2]
                     trajectory_mask[b, n, t] = state.is_valid
 
+        for b in range(len(target_ids)):
+            for n in range(len(agent_histories)):
+                history = agent_histories[b * N + n]
+                for t, state in enumerate(history):
+                    if t < T-1:
+                        pos_diff = -state.xyz[:2] + past_xyz[b, n, t + 1, :2]
+                        time_diff = (-state.timestamp + time_embed[b, n, t + 1, -1]) * 1e-6
+                        vel_vec = np.divide(pos_diff, time_diff, where=time_diff != 0)
+
         vel_diff = np.diff(past_vxy, axis=2, prepend=past_vxy[..., 0, :][:, :, None, :])
         accel = vel_diff / 0.1
         accel[:, :, 0, :] = accel[:, :, 1, :]
@@ -649,6 +685,37 @@ class MTRNode(Node):
             dtype=np.float32,
         )
         return embedded_inputs, last_xyz, trajectory_mask
+
+    def recalculate_history_velocities(self, histories: List[deque[AgentState]]):
+        """Recalculate velocities in the history.
+        Args:
+            histories (List[deque[AgentState]]): List of agent histories.
+        """
+        relative_histories = []
+
+        for original_history in histories:
+            history = deepcopy(original_history)
+            for i in range(len(original_history)):
+                pos_first = original_history[i-1].xy if i > 0 else original_history[i].xy
+                pos_last = original_history[i +
+                                            1].xy if i < len(original_history) - 1 else original_history[i].xy
+                pos_diff = pos_last - pos_first
+
+                time_last = original_history[i -
+                                             1].timestamp if i > 0 else original_history[i].timestamp
+                time_first = original_history[i+1].timestamp if i < len(
+                    original_history) - 1 else original_history[i].timestamp
+                time_diff = (time_last - time_first) * 1e-6
+                vel_vec = np.divide(pos_diff, time_diff, where=time_diff != 0)
+                vel = np.linalg.norm(vel_vec)
+                state = original_history[i]
+                yaw = original_history[i].yaw
+                vxy = np.array([vel * math.cos(yaw), vel * math.sin(yaw)])
+                relative_state = AgentState(uuid=state.uuid, timestamp=state.timestamp, label_id=state.label_id, xyz=state.xyz,
+                                            size=state.size, yaw=yaw, vxy=vxy.reshape((2,)), is_valid=state.is_valid)
+                history.append(relative_state)
+            relative_histories.append(history)
+        return relative_histories
 
     def _preprocess(
         self,
@@ -672,8 +739,9 @@ class MTRNode(Node):
             current_ego, history.histories.values())
         relative_histories = get_relative_histories(
             [current_ego], sorted_histories)
+        relative_histories = self.recalculate_history_velocities(relative_histories)
         embedded_inputs, last_xyz, trajectory_mask = self.get_embedded_inputs(relative_histories, [
-                                                                              0])
+            0])
         return embedded_inputs, polyline_info, last_xyz, trajectory_mask
 
     def interpolate_trajectory(self, original_traj: Trajectory, start_time: float) -> Trajectory:
@@ -692,13 +760,13 @@ class MTRNode(Node):
 
         # Extract time, positions, velocities, and yaw
         times = np.array([p.time_from_start.sec + p.time_from_start.nanosec *
-                         1e-9 for p in original_traj.points])
+                          1e-9 for p in original_traj.points])
         x = np.array([p.pose.position.x for p in original_traj.points])
         y = np.array([p.pose.position.y for p in original_traj.points])
         vx = np.array([p.longitudinal_velocity_mps for p in original_traj.points])
         vy = np.array([p.lateral_velocity_mps for p in original_traj.points])
         yaw = np.array([yaw_from_quaternion(p.pose.orientation)
-                       for p in original_traj.points])  # Extract yaw
+                        for p in original_traj.points])  # Extract yaw
 
         # Find the closest index BEFORE start_time
         idx_start = np.searchsorted(times, start_time) - 1
