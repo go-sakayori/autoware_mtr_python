@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from awml_pred.common import TRANSFORMS
-from awml_pred.ops import rotate_points_along_z
+from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.agent import AgentState
 import time
 
@@ -82,11 +82,11 @@ class TargetCentricPolyline:
         """
 
         polylines[..., :3] -= current_target.xyz
-        polylines[..., :2] = rotate_points_along_z(
+        polylines[..., :2] = rotate_along_z(
             points=polylines[..., 0:2].reshape(num_target, -1, 2),
             angle=-current_target.yaw,
         ).reshape(num_target, -1, self.num_points, 2)
-        polylines[..., 3:5] = rotate_points_along_z(
+        polylines[..., 3:5] = rotate_along_z(
             points=polylines[..., 3:5].reshape(num_target, -1, 2),
             angle=-current_target.yaw,
         ).reshape(num_target, -1, self.num_points, 2)
@@ -214,7 +214,7 @@ class TargetCentricPolyline:
                 num_target,
                 axis=0,
             )
-            center_offset = rotate_points_along_z(
+            center_offset = rotate_along_z(
                 points=center_offset.reshape(num_target, 1, 2),
                 angle=target_state.yaw,
             ).reshape(num_target, 2)
