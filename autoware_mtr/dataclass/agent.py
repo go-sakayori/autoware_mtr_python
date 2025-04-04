@@ -11,10 +11,13 @@ from autoware_perception_msgs.msg import TrackedObjectKinematics
 from autoware_planning_msgs.msg import Trajectory, TrajectoryPoint
 from geometry_msgs.msg import Vector3
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Quaternion
 import numpy as np
 from numpy.typing import ArrayLike
 from numpy.typing import NDArray
 from unique_identifier_msgs.msg import UUID as RosUUID
+from tf_transformations import quaternion_from_euler
+
 
 __all__ = ("OriginalInfo", "AgentState", "AgentTrajectory")
 
@@ -38,14 +41,53 @@ class OriginalInfo:
         )
 
     @classmethod
+    def from_trajectory(cls, traj, uuid: str | RosUUID,):
+        def _yaw_to_quaternion(yaw: float) -> Quaternion:
+            """Convert yaw angle to quaternion using ROS2 tf_transformations.
+
+            Args:
+                yaw (float): Yaw angle in radians.
+
+            Returns:
+                Quaternion: Quaternion representing the yaw angle.
+            """
+            q = Quaternion()
+            q.x, q.y, q.z, q.w = quaternion_from_euler(0, 0, yaw)
+            return q
+        if not isinstance(uuid, RosUUID):
+            uuid = _str_to_uuid_msg(uuid)
+
+        dimensions = Vector3(x=float(traj[3]), y=float(
+            traj[4]), z=float(traj[5]))
+        classification = ObjectClassification()
+        classification.label = ObjectClassification.CAR
+        classification.probability = 1.0
+
+        kinematics = TrackedObjectKinematics()
+        kinematics.pose_with_covariance.pose.position.x = float(traj[0])
+        kinematics.pose_with_covariance.pose.position.y = float(traj[1])
+        kinematics.pose_with_covariance.pose.position.z = float(traj[2])
+        kinematics.pose_with_covariance.pose.orientation = _yaw_to_quaternion(traj[6])
+        kinematics.twist_with_covariance.twist.linear.x = float(traj[7])
+        kinematics.twist_with_covariance.twist.linear.y = float(traj[8])
+
+        return cls(
+            uuid=uuid,
+            classification=[classification],
+            shape=Shape(type=0, dimensions=dimensions),
+            existence_probability=1.0,
+            kinematics=kinematics,
+        )
+
+    @classmethod
     def from_point(cls, point: TrajectoryPoint, uuid: str | RosUUID,
                    dimensions: tuple[float, float, float] | Vector3,
                    ) -> OriginalInfo:
         if not isinstance(uuid, RosUUID):
             uuid = _str_to_uuid_msg(uuid)
-
         if not isinstance(dimensions, Vector3):
-            dimensions = Vector3(x=dimensions[0], y=dimensions[1], z=dimensions[2])
+            dimensions = Vector3(x=float(dimensions[0]), y=float(
+                dimensions[1]), z=float(dimensions[2]))
         classification = ObjectClassification()
         classification.label = ObjectClassification.CAR
         classification.probability = 1.0

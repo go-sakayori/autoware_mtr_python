@@ -10,6 +10,7 @@ import numpy as np
 from .agent import AgentState
 from .agent import AgentTrajectory
 from .agent import OriginalInfo
+from awml_pred.typing import NDArray
 
 __all__ = ("AgentHistory",)
 
@@ -30,6 +31,30 @@ class AgentHistory:
         """
         for state, info in zip(states, infos, strict=True):
             self.update_state(state, info)
+
+    def from_trajectory(self, trajectory: NDArray, label_id: int, uuid: str) -> None:
+        """Update history data from trajectory.
+
+        Args:
+            trajectory (NDArray): Trajectory data in the shape of (N, T, D).
+            infos (Sequence[OriginalInfo]): Sequence of OriginalInfos.
+        """
+        print("trajectory.shape", trajectory.shape)
+        for t in range(trajectory.shape[0]):
+            for i, traj in enumerate(trajectory[t]):
+                info: OriginalInfo = OriginalInfo.from_trajectory(
+                    traj=traj, uuid=uuid)
+                state: AgentState = AgentState(
+                    uuid=uuid,
+                    timestamp=i * 0.1,
+                    label_id=label_id,
+                    xyz=traj[:3],
+                    size=traj[3:6],
+                    yaw=traj[6],
+                    vxy=traj[7:9],
+                    is_valid=True,
+                )
+                self.update_state(state, info)
 
     def update_state(self, state: AgentState, info: OriginalInfo | None = None) -> None:
         """Update history state.
