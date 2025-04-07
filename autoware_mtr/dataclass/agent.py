@@ -152,8 +152,8 @@ class AgentState:
     """A class represents agent state at the specific time."""
 
     uuid: str
-    timestamp: float = -np.inf
-    label_id: int = -1
+    timestamp: float = 0.0
+    label_id: int = 0
     xyz: NDArray = np.zeros(3)
     size: NDArray = np.zeros(3)
     yaw: float = 0.0

@@ -49,5 +49,4 @@ def rotate_along_z(points: NDArray, angle: Number | NDArray) -> NDArray:
         )
         points_rot = torch.matmul(points[:, :, 0:3], rot_matrix)
         points_rot = torch.cat((points_rot, points[:, :, 3:]), dim=-1)
-
-    return points_rot.numpy() if is_numpy else points_rot
+    return points_rot.cpu().detach().numpy() if is_numpy else points_rot
