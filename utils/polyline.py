@@ -8,6 +8,7 @@ from awml_pred.common import TRANSFORMS
 from autoware_mtr.geometry import rotate_along_z
 from autoware_mtr.dataclass.agent import AgentState
 import time
+from numba import njit, prange
 
 
 if TYPE_CHECKING:
@@ -15,6 +16,46 @@ if TYPE_CHECKING:
     from awml_pred.typing import NDArrayBool, NDArrayF32, NDArrayI64
 
 __all__ = ("TargetCentricPolyline",)
+
+
+@njit(parallel=True)
+def compute_polyline_centers_batch(polylines, masks):
+    batch_size, num_polylines, num_points, dim = polylines.shape
+    centers = np.empty((batch_size, num_polylines, 3), dtype=np.float32)
+
+    for b in prange(batch_size):
+        for i in prange(num_polylines):
+            polyline = polylines[b, i, :, :3]
+            mask = masks[b, i]
+            valid_points = polyline[mask, :3]
+
+            if len(valid_points) < 2:
+                if len(valid_points) > 0:
+                    centers[b, i] = valid_points[0, :3]
+                else:
+                    centers[b, i] = np.array([np.nan, np.nan], dtype=np.float32)
+                continue
+
+            diffs = valid_points[1:] - valid_points[:-1]  # (N-1, 3)
+            segment_lengths = np.empty(len(diffs), dtype=np.float32)
+            for j in range(len(diffs)):
+                segment_lengths[j] = np.sqrt(diffs[j, 0]**2 + diffs[j, 1]**2 + diffs[j, 2]**2)
+            cumulative_length = np.empty(len(segment_lengths) + 1)
+            cumulative_length[0] = 0
+            for j in range(len(segment_lengths)):
+                cumulative_length[j + 1] = cumulative_length[j] + segment_lengths[j]
+
+            total_length = cumulative_length[-1]
+            mid_length = total_length / 2
+
+            idx = np.searchsorted(cumulative_length, mid_length) - 1
+            if idx < 0:
+                idx = 0
+            t = (mid_length - cumulative_length[idx]) / (
+                cumulative_length[idx + 1] - cumulative_length[idx])
+            centers[b, i] = (1 - t) * valid_points[idx, :3] + t * valid_points[idx + 1, :3]
+
+    return centers
 
 
 @TRANSFORMS.register()
@@ -234,9 +275,6 @@ class TargetCentricPolyline:
         info["polylines"] = ret_polylines
         info["polylines_mask"] = ret_polylines_mask > 0
 
-        info["polyline_centers"] = np.array([[
-            self._load_polyline_center(polyline, mask)
-            for polyline, mask in zip(ret_polyline, ret_polyline_mask)
-        ] for ret_polyline, ret_polyline_mask in zip(ret_polylines, ret_polylines_mask)])
-
+        info["polyline_centers"] = compute_polyline_centers_batch(
+            ret_polylines, ret_polylines_mask)
         return info, batch_polylines, batch_polylines_mask, polyline_center
