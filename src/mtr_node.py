@@ -468,7 +468,7 @@ class MTRNode(Node):
 
     def _odometry_callback(self, msg: Odometry) -> None:
         timestamp = timestamp2us(msg.header)
-        self._history.remove_invalid(timestamp, self._timestamp_threshold)
+        # self._history.remove_invalid(timestamp, self._timestamp_threshold)
 
         # update agent history
         self.current_ego, self.current_ego_info = from_odometry(
