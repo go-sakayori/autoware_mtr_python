@@ -5,7 +5,7 @@
     score_threshold: 0.0 # threshold of predicted score
     labels: ["VEHICLE"] # only ego vehicle is considered
     ego_dimensions: [4.0,2.0,1.7] # [length, width, height]
-    propagate_future_states: false
+    propagate_future_states: true
     add_left_bias_history: false
     add_right_bias_history: false
     publish_debug_polyline_batch: false
