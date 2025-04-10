@@ -20,6 +20,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
+from rcl_interfaces.msg import SetParametersResult
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.parameter import Parameter
 from std_msgs.msg import Header
@@ -125,12 +126,6 @@ class MTRNode(Node):
             self.declare_parameter("score_threshold", descriptor=descriptor)
             .get_parameter_value()
             .double_value
-        )
-
-        self._publish_debug_polyline_batch = (
-            self.declare_parameter("publish_debug_polyline_batch", descriptor=descriptor)
-            .get_parameter_value()
-            .bool_value
         )
 
         self._publish_debug_polyline_map = (
@@ -313,11 +308,16 @@ class MTRNode(Node):
         for param in params:
             if param.name == "propagate_future_states":
                 self.propagate_future_states = param.value
-
+            if param.name == "add_left_bias_history":
+                self.add_left_bias_history = param.value
+            if param.name == "add_right_bias_history":
+                self.add_right_bias_history = param.value
+            if param.name == "future_state_propagation_sec":
+                self.future_state_propagation_sec = param.value
+            if param.name == "publish_debug_polyline_map":
+                self._publish_debug_polyline_map = param.value
         # Return success
-        return rclpy.parameter.ParameterValue(
-            successful=True
-        )
+        return SetParametersResult(successful=True)
 
     def _create_pre_processed_input(self, current_ego: AgentState, history: AgentHistory):
         past_embed, polyline_info, ego_last_xyz, trajectory_mask = self._preprocess(
@@ -500,6 +500,7 @@ class MTRNode(Node):
         if propagation_required and self._prev_trajectory is not None and len(self._prev_trajectory.points) > 2:
             history_from_traj, future_ego_state, future_ego_info = self.get_ego_history_from_trajectory(
                 self._prev_trajectory, self.future_state_propagation_sec)
+
             if history_from_traj is not None and self.propagate_future_states:
                 ego_states.append(future_ego_state)
                 infos.append(future_ego_info)
@@ -522,12 +523,6 @@ class MTRNode(Node):
 
         self._ego_trajectories_publisher.publish(ego_multiple_trajs)
         self._publisher.publish(pred_objs)
-        if self._publish_debug_polyline_batch:
-            header = Header()
-            header.stamp = self.get_clock().now().to_msg()
-            header.frame_id = "map"
-            self._pub_debug_polylines(self._batch_polylines,
-                                      self._batch_polylines_mask, header)
 
     def _postprocess(
         self,
@@ -733,7 +728,7 @@ class MTRNode(Node):
         idx_start = max(0, idx_start)  # Ensure valid index
 
         # Define new time samples every 0.1s for 1 second interval
-        t_interp = np.arange(start_time, start_time + 1.0 + 1e-6, 0.1)
+        t_interp = np.arange(start_time, start_time + 1.0 + 1e-3, 0.1)
 
         # Ensure valid interpolation range
         if times[-1] < t_interp[-1]:  # Not enough data to interpolate fully
@@ -773,7 +768,6 @@ class MTRNode(Node):
             traj_point.pose.orientation = _yaw_to_quaternion(yaw_interp[i])
 
             new_traj.points.append(traj_point)
-
         return new_traj
 
     def get_ego_history_from_trajectory(self, previous_best_trajectory: Trajectory, time_start: float):
@@ -789,11 +783,9 @@ class MTRNode(Node):
         interpolated_trajectory: NewTrajectory = self.interpolate_trajectory(
             previous_best_trajectory, time_start)
         history = AgentHistory(max_length=self._num_timestamps)
-        start_index = 0
-        end_index = len(interpolated_trajectory.points) - 1
-        for i in range(start_index, end_index):
-            point = interpolated_trajectory.points[i]
-            state, info = from_trajectory_point(point=point, uuid=self._ego_uuid_future, header=previous_best_trajectory.header, label_id=AgentLabel.VEHICLE,
+        for i in range(len(interpolated_trajectory.points)):
+            point = interpolated_trajectory.points[-1]
+            state, info = from_trajectory_point(point=point, uuid=self._ego_uuid_future, timestamp=float(i)*0.1, label_id=AgentLabel.VEHICLE,
                                                 size=self.ego_dimensions)
             history.update_state(state, info)
         return history, state, info
