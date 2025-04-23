@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `autoware_mtr_python` package is part of the Autoware Universe project, specifically within the perception module. This package provides functionalities for the MTR (Motion Transformer) node implemented in `mtr_node.py`.  For more information about the MTR model, please refer to the original paper publication: [Motion Transformer with Global Intention Localization and Local Movement Refinement]{https://arxiv.org/abs/2209.13508} by Shi et. al.
+The `autoware_mtr_python` package is part of the Autoware Universe project. This package provides functionalities for the MTR (Motion Transformer) node implemented in `mtr_node.py`.  For more information about the MTR model, please refer to the original paper publication: [Motion Transformer with Global Intention Localization and Local Movement Refinement]{https://arxiv.org/abs/2209.13508} by Shi et. al.
 Furthermore, this project takes many of its tools from the [AWMLprediction repository]{https://github.com/tier4/AWMLprediction}.
 
 ## Main Functionality
@@ -73,10 +73,10 @@ A binary mask with the same agent and timestep structure as `obj_trajs`. A value
 
 This tensor encodes vectorized map features, such as lane centerlines or crosswalk edges. Each polyline is broken into `P = 20` points, and each point has `Dl = 9` features which may include:
 
-- Position (x, y)
-- 3D normalized direction (dx,dy,dz)
+- Position (x, y, z) (3)
+- 3D normalized direction (dx,dy,dz) (3)
 - Lane type or semantic ID (1)
-- Position of next point in the polyline (x,y)
+- Position of next point in the polyline (x,y) (2)
 
 Used to provide spatial context to the model. The image below shows a debug visualization of the polylines, color coded for different polyline types.
 
@@ -86,7 +86,7 @@ Used to provide spatial context to the model. The image below shows a debug visu
 
 ### Details of `map_polylines_mask`
 
-This mask indicates which of the `P` points per polyline are valid. This is useful since not all polylines are exactly 20 points long, and padding is common.
+This mask indicates which of the `P` points per polyline are valid. This is useful since not all polylines are exactly 20 points long, and padding with zeroes is used to fill the remaining points.
 
 ---
 
