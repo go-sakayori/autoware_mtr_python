@@ -51,8 +51,8 @@ def compute_polyline_centers_batch(polylines, masks):
             idx = np.searchsorted(cumulative_length, mid_length) - 1
             if idx < 0:
                 idx = 0
-            t = (mid_length - cumulative_length[idx]) / (
-                cumulative_length[idx + 1] - cumulative_length[idx])
+            den = cumulative_length[idx + 1] - cumulative_length[idx]
+            t = (mid_length - cumulative_length[idx]) / den if den > 1e-6 else 0
             centers[b, i] = (1 - t) * valid_points[idx, :3] + t * valid_points[idx + 1, :3]
 
     return centers
@@ -172,8 +172,8 @@ class TargetCentricPolyline:
         idx = np.searchsorted(cumulative_length, mid_length) - 1
 
         # Linear interpolation
-        t = (mid_length - cumulative_length[idx]) / \
-            (cumulative_length[idx + 1] - cumulative_length[idx])
+        den = cumulative_length[idx + 1] - cumulative_length[idx]
+        t = (mid_length - cumulative_length[idx]) / den if den > 1e-6 else 0
         center_point = (1 - t) * valid_points[idx] + t * valid_points[idx + 1]
 
         return center_point
